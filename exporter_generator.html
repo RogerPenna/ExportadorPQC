@@ -404,45 +404,55 @@
       await loadGristMetadata();
     });
 
+    const PQC_FALLBACK_TABLES = [
+      { tableId: 'Empresa', id: 'Empresa' },
+      { tableId: 'PDCA', id: 'PDCA' },
+      { tableId: 'Resultados', id: 'Resultados' },
+      { tableId: 'Plano_de_Melhorias', id: 'Plano_de_Melhorias' },
+      { tableId: 'Horas_Capacitacao', id: 'Horas_Capacitacao' },
+      { tableId: 'ResumoNotas', id: 'ResumoNotas' },
+      { tableId: 'Practices', id: 'Practices' },
+      { tableId: 'Avaliadores', id: 'Avaliadores' }
+    ];
+
     async function loadGristMetadata() {
       try {
         // Fetch standard Grist metadata tables
         const tablesData = await grist.docApi.fetchTable('_grist_Tables');
-        const colsData = await grist.docApi.fetchTable('_grist_Tables_column');
-
         const rawTables = tablesData.records || tablesData;
-        const rawCols = colsData.records || colsData;
-
         gristTables = rawTables.map(r => r.fields || r).filter(t => !t.tableId.startsWith('_'));
-        gristColumns = rawCols.map(r => r.fields || r);
-
-        // Populate table selector
-        const tableSelect = document.getElementById('table-select');
-        tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
-
-        if (gristTables.length > 0) {
-          onTableChange();
-        }
       } catch (err) {
-        console.error('Failed to load Grist schema:', err);
-        // Fallback in case of sandboxed permissions / mock tables
-        mockMetadata();
+        console.warn('Failed to load _grist_Tables, using PQC fallbacks:', err);
+        gristTables = PQC_FALLBACK_TABLES;
+      }
+
+      try {
+        const colsData = await grist.docApi.fetchTable('_grist_Tables_column');
+        const rawCols = colsData.records || colsData;
+        gristColumns = rawCols.map(r => r.fields || r);
+      } catch (err) {
+        console.warn('Failed to load _grist_Tables_column. Columns will be auto-discovered via records:', err);
+        gristColumns = [];
+      }
+
+      // Populate table selector
+      const tableSelect = document.getElementById('table-select');
+      tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
+
+      if (gristTables.length > 0) {
+        onTableChange();
       }
     }
 
     function mockMetadata() {
-      gristTables = [
-        { tableId: 'Empresa', id: 1 },
-        { tableId: 'PDCA', id: 2 },
-        { tableId: 'Resultados', id: 3 }
-      ];
+      gristTables = PQC_FALLBACK_TABLES;
       gristColumns = [
-        { parentId: 1, colId: 'Nome_da_Empresa', label: 'Nome da Empresa', type: 'Text' },
-        { parentId: 1, colId: 'Email', label: 'E-mail', type: 'Text' },
-        { parentId: 1, colId: 'Avaliador', label: 'Avaliador', type: 'Text' },
-        { parentId: 2, colId: 'PraticaRef', label: 'ID Prática', type: 'Int' },
-        { parentId: 2, colId: 'PraticaRef_Nome2', label: 'Prática', type: 'Text' },
-        { parentId: 2, colId: 'Nota_da_Pratica', label: 'Nota', type: 'Numeric' }
+        { parentId: 'Empresa', colId: 'Nome_da_Empresa', label: 'Nome da Empresa', type: 'Text' },
+        { parentId: 'Empresa', colId: 'Email', label: 'E-mail', type: 'Text' },
+        { parentId: 'Empresa', colId: 'Avaliador', label: 'Avaliador', type: 'Text' },
+        { parentId: 'PDCA', colId: 'PraticaRef', label: 'ID Prática', type: 'Int' },
+        { parentId: 'PDCA', colId: 'PraticaRef_Nome2', label: 'Prática', type: 'Text' },
+        { parentId: 'PDCA', colId: 'Nota_da_Pratica', label: 'Nota', type: 'Numeric' }
       ];
       const tableSelect = document.getElementById('table-select');
       tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
@@ -452,34 +462,52 @@
     async function onTableChange() {
       const tableSelect = document.getElementById('table-select');
       selectedTableId = tableSelect.value;
-      
-      const tableObj = gristTables.find(t => t.tableId === selectedTableId);
-      if (!tableObj) return;
+      if (!selectedTableId) return;
 
-      // Find columns for this table
-      const rawCols = gristColumns.filter(c => c.parentId === tableObj.id || c.parentId === selectedTableId);
-      
-      // Map columns
-      selectedColumns = rawCols
-        .filter(c => c.colId !== 'manualSort' && c.colId !== 'id')
-        .map(c => ({
-          colId: c.colId,
-          label: c.label || c.colId,
-          type: c.type,
-          enabled: true,
-          widgetOptions: c.widgetOptions ? (typeof c.widgetOptions === 'string' ? JSON.parse(c.widgetOptions) : c.widgetOptions) : {}
-        }));
-
-      // Fetch sample records from the chosen table
+      // 1. Fetch data/records first to build currentTableData and auto-discover columns if schema is empty
       try {
         const recordsData = await grist.docApi.fetchTable(selectedTableId);
         const rawRecs = recordsData.records || recordsData;
         currentTableData = rawRecs.map(r => r.fields || r);
       } catch (e) {
-        // Mock sample rows
-        currentTableData = [
-          { Nome_da_Empresa: "Hinckel Contabilidade", Email: "contato@hinckel.com", Avaliador: "Marcelo", PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", Nota_da_Pratica: 8.5 },
-          { Nome_da_Empresa: "RS Auditoria", Email: "rs@auditoria.com", Avaliador: "Evandro", PraticaRef: 2, PraticaRef_Nome2: "Processos e PDCA", Nota_da_Pratica: 9.0 }
+        console.error("Error fetching records for table " + selectedTableId, e);
+        currentTableData = [];
+      }
+
+      // 2. Discover columns
+      const tableObj = gristTables.find(t => t.tableId === selectedTableId);
+      let rawCols = [];
+      if (gristColumns.length > 0 && tableObj) {
+        rawCols = gristColumns.filter(c => c.parentId === tableObj.id || c.parentId === selectedTableId);
+      }
+
+      if (rawCols.length > 0) {
+        // Map columns from Grist schema metadata
+        selectedColumns = rawCols
+          .filter(c => c.colId !== 'manualSort' && c.colId !== 'id')
+          .map(c => ({
+            colId: c.colId,
+            label: c.label || c.colId,
+            type: c.type,
+            enabled: true,
+            widgetOptions: c.widgetOptions ? (typeof c.widgetOptions === 'string' ? JSON.parse(c.widgetOptions) : c.widgetOptions) : {}
+          }));
+      } else if (currentTableData.length > 0) {
+        // Self-healing fallback: Auto-discover columns from record fields
+        const sampleRecord = currentTableData[0];
+        selectedColumns = Object.keys(sampleRecord)
+          .filter(key => key !== 'id' && key !== 'manualSort')
+          .map(key => ({
+            colId: key,
+            label: key,
+            type: typeof sampleRecord[key] === 'number' ? 'Numeric' : 'Text',
+            enabled: true,
+            widgetOptions: {}
+          }));
+      } else {
+        // Ultimate fallback
+        selectedColumns = [
+          { colId: 'Nenhum_Registro', label: 'Tabela vazia / Sem colunas', type: 'Text', enabled: true, widgetOptions: {} }
         ];
       }
 
