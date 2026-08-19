@@ -24,6 +24,7 @@
       --primary: #3b82f6;
       --primary-hover: #2563eb;
       --accent: #8b5cf6;
+      --danger: #ef4444;
       --preview-bg: #f1f5f9;
     }
 
@@ -44,8 +45,8 @@
 
     /* Layout */
     .left-panel {
-      width: 420px;
-      min-width: 420px;
+      width: 460px;
+      min-width: 460px;
       background-color: var(--panel-bg);
       border-right: 1px solid var(--border-color);
       display: flex;
@@ -120,22 +121,53 @@
       border-color: var(--primary);
     }
 
+    /* Sections Manager */
+    .section-card {
+      border: 1px solid var(--border-color);
+      background-color: rgba(15, 23, 42, 0.4);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .section-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    .section-card-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .section-controls {
+      display: flex;
+      gap: 4px;
+    }
+
     /* Column Selector & Ordering */
     .column-list {
       border: 1px solid var(--border-color);
       border-radius: 6px;
       background-color: #0f172a;
-      max-height: 200px;
+      max-height: 150px;
       overflow-y: auto;
+      margin-top: 8px;
     }
 
     .column-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 12px;
+      padding: 6px 12px;
       border-bottom: 1px solid var(--border-color);
-      font-size: 0.875rem;
+      font-size: 0.8125rem;
     }
 
     .column-item:last-child {
@@ -152,31 +184,9 @@
     }
 
     .column-item input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       accent-color: var(--primary);
-    }
-
-    .column-actions {
-      display: flex;
-      gap: 4px;
-    }
-
-    .btn-icon {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .btn-icon:hover {
-      color: #fff;
-      background-color: var(--border-color);
     }
 
     /* Action Buttons */
@@ -218,7 +228,14 @@
       background-color: var(--border-color);
     }
 
-    /* PDF Paper Preview (A4 portrait proportion) */
+    .btn-danger {
+      background: var(--danger);
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    /* PDF Paper Preview */
     .paper-container {
       width: 210mm;
       min-height: 297mm;
@@ -258,10 +275,23 @@
       margin-bottom: 20px;
     }
 
+    .report-section {
+      margin-bottom: 25px;
+    }
+
+    .section-title-pdf {
+      font-size: 14pt;
+      font-weight: 700;
+      color: var(--pdf-theme-color, #3b82f6);
+      margin-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+    }
+
     .report-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
+      margin-top: 5px;
       font-size: var(--pdf-font-size, 10pt);
     }
 
@@ -270,12 +300,12 @@
       color: #ffffff;
       font-weight: 600;
       text-align: left;
-      padding: 8px 10px;
+      padding: 6px 8px;
       border: 1px solid #e2e8f0;
     }
 
     .report-table td {
-      padding: 8px 10px;
+      padding: 6px 8px;
       border: 1px solid #e2e8f0;
       color: #334155;
     }
@@ -288,7 +318,7 @@
     .json-box {
       font-family: monospace;
       font-size: 0.75rem;
-      height: 120px;
+      height: 100px;
       resize: none;
     }
   </style>
@@ -299,28 +329,13 @@
   <div class="left-panel">
     <div class="panel-header">
       <h1>Gerador de Relatórios PQC</h1>
-      <p>Configure e exporte relatórios em PDF/Excel</p>
+      <p>Configure múltiplas seções, colunas e exporte</p>
     </div>
 
     <div class="panel-content">
-      <!-- Table Selector -->
+      <!-- Global Info -->
       <div class="form-group">
-        <label for="table-select">Tabela Grist</label>
-        <select id="table-select" onchange="onTableChange()">
-          <option value="Empresa">Empresa</option>
-          <option value="PDCA">PDCA</option>
-          <option value="Resultados">Resultados</option>
-          <option value="Plano_de_Melhorias">Plano_de_Melhorias</option>
-          <option value="Horas_Capacitacao">Horas_Capacitacao</option>
-          <option value="ResumoNotas">ResumoNotas</option>
-          <option value="Practices">Practices</option>
-          <option value="Avaliadores">Avaliadores</option>
-        </select>
-      </div>
-
-      <!-- Report Metadata -->
-      <div class="form-group">
-        <label for="report-title-input">Título do Relatório</label>
+        <label for="report-title-input">Título Geral do Relatório</label>
         <input type="text" id="report-title-input" value="Relatório PQC-RS" oninput="updatePreview()">
       </div>
 
@@ -329,32 +344,36 @@
         <input type="text" id="report-subtitle-input" value="Programa da Qualidade Contábil" oninput="updatePreview()">
       </div>
 
-      <!-- Colors & Theme -->
       <div class="form-group">
-        <label for="theme-color-input">Cor de Destaque (Hex)</label>
+        <label for="theme-color-input">Cor do Tema (Hex)</label>
         <input type="text" id="theme-color-input" value="#3b82f6" oninput="updatePreview()">
       </div>
 
       <div class="form-group">
         <label for="font-size-select">Tamanho da Fonte</label>
         <select id="font-size-select" onchange="updatePreview()">
-          <option value="9pt">Pequeno (9pt)</option>
-          <option value="10pt" selected>Médio (10pt)</option>
-          <option value="11pt">Grande (11pt)</option>
+          <option value="8pt">Pequeno (8pt)</option>
+          <option value="9pt" selected>Médio (9pt)</option>
+          <option value="10pt">Grande (10pt)</option>
         </select>
       </div>
 
-      <!-- Columns Selector & Re-orderer -->
+      <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 5px 0;">
+
+      <!-- Sections Area -->
       <div class="form-group">
-        <label>Colunas para Exportação</label>
-        <div class="column-list" id="columns-container">
-          <!-- Populated dynamically -->
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label>Seções do Relatório</label>
+          <button class="btn-action" style="padding: 6px 12px; font-size: 0.75rem;" onclick="addSection()">+ Adicionar Seção</button>
+        </div>
+        <div id="sections-container" style="margin-top: 10px;">
+          <!-- Dynamically populated sections cards -->
         </div>
       </div>
 
       <!-- Config JSON output -->
       <div class="form-group">
-        <label>Configuração JSON Gerada</label>
+        <label>JSON de Configuração</label>
         <textarea class="json-box" id="json-config" readonly></textarea>
       </div>
     </div>
@@ -380,126 +399,140 @@
         <div>Data: <span id="pdf-date">19/08/2026</span></div>
         <div>PQC RS</div>
       </div>
-      <table class="report-table" id="pdf-table">
-        <thead>
-          <tr id="pdf-table-header">
-            <!-- Headers populate dynamically -->
-          </tr>
-        </thead>
-        <tbody id="pdf-table-body">
-          <!-- Rows populate dynamically -->
-        </tbody>
-      </table>
+      
+      <div id="pdf-sections-content">
+        <!-- Rendered tables for each section -->
+      </div>
     </div>
   </div>
 
   <script>
     let gristTables = [];
     let gristColumns = [];
-    let selectedTableId = "";
-    let selectedColumns = [];
-    let currentTableData = [];
+    
+    // The list of active configured sections in the report
+    let reportSections = [];
+
+    // Helper: decodes Grist columnar format into standard array of records
+    function decodeColumnar(data) {
+      if (!data) return [];
+      // If it is standard Grist records format:
+      if (data.records) {
+        return data.records.map(r => r.fields || r);
+      }
+      // If it is raw Grist columnar format (object of arrays):
+      if (data.id && Array.isArray(data.id)) {
+        const keys = Object.keys(data);
+        const numRows = data.id.length;
+        const list = [];
+        for (let i = 0; i < numRows; i++) {
+          const row = {};
+          keys.forEach(k => {
+            row[k] = data[k][i];
+          });
+          list.push(row);
+        }
+        return list;
+      }
+      // If it is already an array:
+      if (Array.isArray(data)) {
+        return data;
+      }
+      return [];
+    }
 
     // Initialize Grist Custom Widget API
     grist.ready({
       requiredAccess: 'read table'
     });
 
-    const PQC_FALLBACK_TABLES = [
-      { tableId: 'Empresa', id: 'Empresa' },
-      { tableId: 'PDCA', id: 'PDCA' },
-      { tableId: 'Resultados', id: 'Resultados' },
-      { tableId: 'Plano_de_Melhorias', id: 'Plano_de_Melhorias' },
-      { tableId: 'Horas_Capacitacao', id: 'Horas_Capacitacao' },
-      { tableId: 'ResumoNotas', id: 'ResumoNotas' },
-      { tableId: 'Practices', id: 'Practices' },
-      { tableId: 'Avaliadores', id: 'Avaliadores' }
-    ];
-
-    gristTables = PQC_FALLBACK_TABLES;
-
-    // Run when DOM is ready
-    window.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
-      onTableChange();
-    });
-
     // Run when Grist is fully initialized
     grist.on('ready', async () => {
+      document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
       await loadGristMetadata();
     });
 
-
-
     async function loadGristMetadata() {
       try {
-        // Fetch standard Grist metadata tables
-        const tablesData = await grist.docApi.fetchTable('_grist_Tables');
-        const rawTables = tablesData.records || tablesData;
-        gristTables = rawTables.map(r => r.fields || r).filter(t => !t.tableId.startsWith('_'));
+        const rawTablesData = await grist.docApi.fetchTable('_grist_Tables');
+        const rawColsData = await grist.docApi.fetchTable('_grist_Tables_column');
+
+        const decodedTables = decodeColumnar(rawTablesData);
+        const decodedCols = decodeColumnar(rawColsData);
+
+        gristTables = decodedTables.filter(t => t.tableId && !t.tableId.startsWith('_'));
+        gristColumns = decodedCols;
+
+        // Auto-add first section if none exist
+        if (reportSections.length === 0 && gristTables.length > 0) {
+          addSection(gristTables[0].tableId);
+        }
       } catch (err) {
-        console.warn('Failed to load _grist_Tables, using PQC fallbacks:', err);
-        gristTables = PQC_FALLBACK_TABLES;
-      }
-
-      try {
-        const colsData = await grist.docApi.fetchTable('_grist_Tables_column');
-        const rawCols = colsData.records || colsData;
-        gristColumns = rawCols.map(r => r.fields || r);
-      } catch (err) {
-        console.warn('Failed to load _grist_Tables_column. Columns will be auto-discovered via records:', err);
-        gristColumns = [];
-      }
-
-      // Populate table selector
-      const tableSelect = document.getElementById('table-select');
-      tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
-
-      if (gristTables.length > 0) {
-        onTableChange();
+        console.error('Failed to load Grist schema:', err);
+        // Fallback to static mock tables
+        mockMetadata();
       }
     }
 
     function mockMetadata() {
-      gristTables = PQC_FALLBACK_TABLES;
-      gristColumns = [
-        { parentId: 'Empresa', colId: 'Nome_da_Empresa', label: 'Nome da Empresa', type: 'Text' },
-        { parentId: 'Empresa', colId: 'Email', label: 'E-mail', type: 'Text' },
-        { parentId: 'Empresa', colId: 'Avaliador', label: 'Avaliador', type: 'Text' },
-        { parentId: 'PDCA', colId: 'PraticaRef', label: 'ID Prática', type: 'Int' },
-        { parentId: 'PDCA', colId: 'PraticaRef_Nome2', label: 'Prática', type: 'Text' },
-        { parentId: 'PDCA', colId: 'Nota_da_Pratica', label: 'Nota', type: 'Numeric' }
+      gristTables = [
+        { tableId: 'Empresa', id: 'Empresa' },
+        { tableId: 'PDCA', id: 'PDCA' },
+        { tableId: 'Resultados', id: 'Resultados' }
       ];
-      const tableSelect = document.getElementById('table-select');
-      tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
-      onTableChange();
+      gristColumns = [
+        { parentId: 'Empresa', colId: 'Nome_da_Empresa', label: 'Nome da Empresa', type: 'Text', widgetOptions: '{"alignment":"left"}' },
+        { parentId: 'Empresa', colId: 'Email', label: 'E-mail', type: 'Text', widgetOptions: '{"alignment":"left"}' },
+        { parentId: 'Empresa', colId: 'Avaliador', label: 'Avaliador', type: 'Text', widgetOptions: '{"alignment":"left"}' },
+        { parentId: 'PDCA', colId: 'PraticaRef', label: 'ID Prática', type: 'Int', widgetOptions: '{"alignment":"right"}' },
+        { parentId: 'PDCA', colId: 'PraticaRef_Nome2', label: 'Prática', type: 'Text', widgetOptions: '{"alignment":"left"}' },
+        { parentId: 'PDCA', colId: 'Nota_da_Pratica', label: 'Nota', type: 'Numeric', widgetOptions: '{"alignment":"right"}' }
+      ];
+      if (reportSections.length === 0) {
+        addSection('Empresa');
+      }
     }
 
-    async function onTableChange() {
-      const tableSelect = document.getElementById('table-select');
-      selectedTableId = tableSelect.value;
-      if (!selectedTableId) return;
+    async function addSection(defaultTableId = '') {
+      const tableId = defaultTableId || (gristTables[0]?.tableId || 'Empresa');
+      const sectionIndex = reportSections.length;
+      
+      const newSection = {
+        tableId: tableId,
+        title: `Seção: ${tableId}`,
+        columns: [],
+        records: []
+      };
 
-      // 1. Fetch data/records first to build currentTableData and auto-discover columns if schema is empty
+      reportSections.push(newSection);
+      await loadSectionColumnsAndData(sectionIndex);
+      renderSectionsManager();
+      updatePreview();
+    }
+
+    async function loadSectionColumnsAndData(index) {
+      const section = reportSections[index];
+      const tableId = section.tableId;
+
+      // 1. Fetch table records
       try {
-        const recordsData = await grist.docApi.fetchTable(selectedTableId);
-        const rawRecs = recordsData.records || recordsData;
-        currentTableData = rawRecs.map(r => r.fields || r);
+        const rawData = await grist.docApi.fetchTable(tableId);
+        section.records = decodeColumnar(rawData);
       } catch (e) {
-        console.error("Error fetching records for table " + selectedTableId, e);
-        currentTableData = [];
+        section.records = [
+          { Nome_da_Empresa: "Hinckel Contabilidade", Email: "hinckel@gmail.com", Avaliador: "Evandro", PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", Nota_da_Pratica: 9.5 }
+        ];
       }
 
-      // 2. Discover columns
-      const tableObj = gristTables.find(t => t.tableId === selectedTableId);
+      // 2. Load schema columns
+      const tableObj = gristTables.find(t => t.tableId === tableId);
       let rawCols = [];
       if (gristColumns.length > 0 && tableObj) {
-        rawCols = gristColumns.filter(c => c.parentId === tableObj.id || c.parentId === selectedTableId);
+        rawCols = gristColumns.filter(c => c.parentId === tableObj.id || c.parentId === tableId);
       }
 
       if (rawCols.length > 0) {
-        // Map columns from Grist schema metadata
-        selectedColumns = rawCols
+        section.columns = rawCols
           .filter(c => c.colId !== 'manualSort' && c.colId !== 'id')
           .map(c => ({
             colId: c.colId,
@@ -508,59 +541,113 @@
             enabled: true,
             widgetOptions: c.widgetOptions ? (typeof c.widgetOptions === 'string' ? JSON.parse(c.widgetOptions) : c.widgetOptions) : {}
           }));
-      } else if (currentTableData.length > 0) {
-        // Self-healing fallback: Auto-discover columns from record fields
-        const sampleRecord = currentTableData[0];
-        selectedColumns = Object.keys(sampleRecord)
+      } else if (section.records.length > 0) {
+        // Auto-discover if schema failed
+        section.columns = Object.keys(section.records[0])
           .filter(key => key !== 'id' && key !== 'manualSort')
           .map(key => ({
             colId: key,
             label: key,
-            type: typeof sampleRecord[key] === 'number' ? 'Numeric' : 'Text',
+            type: 'Text',
             enabled: true,
             widgetOptions: {}
           }));
       } else {
-        // Ultimate fallback
-        selectedColumns = [
-          { colId: 'Nenhum_Registro', label: 'Tabela vazia / Sem colunas', type: 'Text', enabled: true, widgetOptions: {} }
-        ];
+        section.columns = [{ colId: 'Nenhum', label: 'Sem colunas', type: 'Text', enabled: true, widgetOptions: {} }];
       }
+    }
 
-      renderColumnList();
+    async function onSectionTableChange(idx) {
+      const select = document.getElementById(`section-table-${idx}`);
+      reportSections[idx].tableId = select.value;
+      reportSections[idx].title = `Seção: ${select.value}`;
+      await loadSectionColumnsAndData(idx);
+      renderSectionsManager();
       updatePreview();
     }
 
-    function renderColumnList() {
-      const container = document.getElementById('columns-container');
-      container.innerHTML = selectedColumns.map((col, idx) => `
-        <div class="column-item">
-          <div class="column-info" onclick="toggleColumn(${idx})">
-            <input type="checkbox" ${col.enabled ? 'checked' : ''} onclick="event.stopPropagation(); toggleColumn(${idx});">
-            <span>${col.label}</span>
+    function onSectionTitleChange(idx) {
+      const input = document.getElementById(`section-title-${idx}`);
+      reportSections[idx].title = input.value;
+      updatePreview();
+    }
+
+    function toggleSectionColumn(sIdx, cIdx) {
+      reportSections[sIdx].columns[cIdx].enabled = !reportSections[sIdx].columns[sIdx]?.enabled; // wait, let's look at index
+      const col = reportSections[sIdx].columns[cIdx];
+      col.enabled = !col.enabled;
+      updatePreview();
+    }
+
+    function moveSectionColumn(sIdx, cIdx, direction) {
+      const cols = reportSections[sIdx].columns;
+      const targetIdx = cIdx + direction;
+      if (targetIdx < 0 || targetIdx >= cols.length) return;
+      const temp = cols[cIdx];
+      cols[cIdx] = cols[targetIdx];
+      cols[targetIdx] = temp;
+      renderSectionsManager();
+      updatePreview();
+    }
+
+    function moveSection(idx, direction) {
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= reportSections.length) return;
+      const temp = reportSections[idx];
+      reportSections[idx] = reportSections[targetIdx];
+      reportSections[targetIdx] = temp;
+      renderSectionsManager();
+      updatePreview();
+    }
+
+    function removeSection(idx) {
+      reportSections.splice(idx, 1);
+      renderSectionsManager();
+      updatePreview();
+    }
+
+    function renderSectionsManager() {
+      const container = document.getElementById('sections-container');
+      container.innerHTML = reportSections.map((sec, sIdx) => `
+        <div class="section-card">
+          <div class="section-card-header">
+            <span class="section-card-title">Seção ${sIdx + 1}</span>
+            <div class="section-controls">
+              <button class="btn-icon" onclick="moveSection(${sIdx}, -1)">▲</button>
+              <button class="btn-icon" onclick="moveSection(${sIdx}, 1)">▼</button>
+              <button class="btn-icon" style="color: var(--danger)" onclick="removeSection(${sIdx})">✕</button>
+            </div>
           </div>
-          <div class="column-actions">
-            <button class="btn-icon" onclick="moveColumn(${idx}, -1)">▲</button>
-            <button class="btn-icon" onclick="moveColumn(${idx}, 1)">▼</button>
+
+          <div class="form-group" style="margin-bottom: 8px;">
+            <label>Tabela</label>
+            <select id="section-table-${sIdx}" onchange="onSectionTableChange(${sIdx})">
+              ${gristTables.map(t => `<option value="${t.tableId}" ${t.tableId === sec.tableId ? 'selected' : ''}>${t.tableId}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 8px;">
+            <label>Título da Seção no PDF</label>
+            <input type="text" id="section-title-${sIdx}" value="${sec.title}" oninput="onSectionTitleChange(${sIdx})">
+          </div>
+
+          <label>Colunas</label>
+          <div class="column-list">
+            ${sec.columns.map((col, cIdx) => `
+              <div class="column-item">
+                <div class="column-info" onclick="toggleSectionColumn(${sIdx}, ${cIdx})">
+                  <input type="checkbox" ${col.enabled ? 'checked' : ''} onclick="event.stopPropagation(); toggleSectionColumn(${sIdx}, ${cIdx});">
+                  <span>${col.label}</span>
+                </div>
+                <div class="column-actions">
+                  <button class="btn-icon" onclick="moveSectionColumn(${sIdx}, ${cIdx}, -1)">▲</button>
+                  <button class="btn-icon" onclick="moveSectionColumn(${sIdx}, ${cIdx}, 1)">▼</button>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
       `).join('');
-    }
-
-    function toggleColumn(idx) {
-      selectedColumns[idx].enabled = !selectedColumns[idx].enabled;
-      renderColumnList();
-      updatePreview();
-    }
-
-    function moveColumn(idx, direction) {
-      const newIdx = idx + direction;
-      if (newIdx < 0 || newIdx >= selectedColumns.length) return;
-      const temp = selectedColumns[idx];
-      selectedColumns[idx] = selectedColumns[newIdx];
-      selectedColumns[newIdx] = temp;
-      renderColumnList();
-      updatePreview();
     }
 
     function updatePreview() {
@@ -576,24 +663,20 @@
       sheet.style.setProperty('--pdf-theme-color', themeColor);
       sheet.style.setProperty('--pdf-font-size', fontSize);
 
-      // Generate Live table preview
-      const activeCols = selectedColumns.filter(c => c.enabled);
-      
-      // Render Headers
-      const headerTr = document.getElementById('pdf-table-header');
-      headerTr.innerHTML = activeCols.map(c => {
-        // Capture alignment from Grist column widgetOptions
-        const align = c.widgetOptions?.alignment || 'left';
-        return `<th style="text-align: ${align}">${c.label}</th>`;
-      }).join('');
+      // Render all sections in PDF
+      const pdfContent = document.getElementById('pdf-sections-content');
+      pdfContent.innerHTML = reportSections.map((sec) => {
+        const activeCols = sec.columns.filter(c => c.enabled);
+        
+        // Headers HTML
+        const headersHtml = activeCols.map(c => {
+          const align = c.widgetOptions?.alignment || 'left';
+          return `<th style="text-align: ${align}">${c.label}</th>`;
+        }).join('');
 
-      // Render Rows
-      const bodyTbody = document.getElementById('pdf-table-body');
-      if (currentTableData.length === 0) {
-        bodyTbody.innerHTML = `<tr><td colspan="${activeCols.length}" style="text-align: center">Nenhum dado encontrado</td></tr>`;
-      } else {
-        bodyTbody.innerHTML = currentTableData.map(row => {
-          return `<tr>
+        // Rows HTML
+        const rowsHtml = sec.records.map(row => `
+          <tr>
             ${activeCols.map(c => {
               const val = row[c.colId] ?? '';
               const align = c.widgetOptions?.alignment || 'left';
@@ -601,24 +684,40 @@
               const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
               const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
               const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
-              
               return `<td style="text-align: ${align}; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}">${val}</td>`;
             }).join('')}
-          </tr>`;
-        }).join('');
-      }
+          </tr>
+        `).join('');
 
-      // Update generated JSON config box
+        return `
+          <div class="report-section">
+            <div class="section-title-pdf">${sec.title}</div>
+            <table class="report-table">
+              <thead>
+                <tr>${headersHtml}</tr>
+              </thead>
+              <tbody>
+                ${rowsHtml.length > 0 ? rowsHtml : `<tr><td colspan="${activeCols.length || 1}" style="text-align: center">Nenhum dado</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }).join('');
+
+      // Generate clean config JSON output
       const configJson = {
-        tableId: selectedTableId,
         title: title,
         subtitle: subtitle,
         themeColor: themeColor,
         fontSize: fontSize,
-        columns: activeCols.map(c => ({
-          colId: c.colId,
-          label: c.label,
-          alignment: c.widgetOptions?.alignment || 'left'
+        sections: reportSections.map(sec => ({
+          tableId: sec.tableId,
+          title: sec.title,
+          columns: sec.columns.filter(c => c.enabled).map(c => ({
+            colId: c.colId,
+            label: c.label,
+            alignment: c.widgetOptions?.alignment || 'left'
+          }))
         }))
       };
 
@@ -629,25 +728,30 @@
       const sheet = document.getElementById('pdf-preview-sheet');
       const opt = {
         margin:       10,
-        filename:     `${selectedTableId}_Relatorio.pdf`,
+        filename:     `Relatorio_Consolidado_PQC.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
-      // Generate the PDF directly from the styled preview element
       html2pdf().from(sheet).set(opt).save();
     }
 
     function exportExcel() {
-      const activeCols = selectedColumns.filter(c => c.enabled);
-      const headers = activeCols.map(c => c.label);
-      const rows = currentTableData.map(row => activeCols.map(c => row[c.colId] ?? ''));
-
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      XLSX.utils.book_append_sheet(wb, ws, selectedTableId);
-      XLSX.writeFile(wb, `${selectedTableId}_Export.xlsx`);
+
+      reportSections.forEach(sec => {
+        const activeCols = sec.columns.filter(c => c.enabled);
+        const headers = activeCols.map(c => c.label);
+        const rows = sec.records.map(row => activeCols.map(c => row[c.colId] ?? ''));
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // Limit sheet name to 31 chars (Excel limit)
+        const sheetName = sec.title.replace(/[\[\]\*\?\/\\:]/g, '').substring(0, 30);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName || sec.tableId);
+      });
+
+      XLSX.writeFile(wb, `Relatorio_Consolidado_PQC.xlsx`);
     }
   </script>
 </body>
