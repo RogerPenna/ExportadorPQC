@@ -330,6 +330,9 @@
     <div class="panel-header">
       <h1>Gerador de Relatórios PQC</h1>
       <p>Configure múltiplas seções, colunas e exporte</p>
+      <div style="background-color: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.3); color: #fef08a; padding: 10px; border-radius: 6px; font-size: 0.75rem; margin-top: 10px; line-height: 1.4;">
+        ⚠️ <strong>Acesso Documento:</strong> Configure o widget no Grist com <strong>"Read Document"</strong> (Acesso ao Documento) para ler todas as tabelas!
+      </div>
     </div>
 
     <div class="panel-content">
@@ -519,9 +522,28 @@
         const rawData = await grist.docApi.fetchTable(tableId);
         section.records = decodeColumnar(rawData);
       } catch (e) {
-        section.records = [
-          { Nome_da_Empresa: "Hinckel Contabilidade", Email: "hinckel@gmail.com", Avaliador: "Evandro", PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", Nota_da_Pratica: 9.5 }
-        ];
+        // Fallbacks per tableId
+        if (tableId === 'PDCA') {
+          section.records = [
+            { PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", PLANEJAR: 3, REALIZAR: 2, VERIFICAR: 0, APRENDER: 0, Nota_da_Pratica: 7.5, Evidencia_Planejar: "Nossa missão e visão de futuro já foram revisadas pelo comitê diretivo de qualidade contábil." }
+          ];
+        } else if (tableId === 'Resultados') {
+          section.records = [
+            { Num: 1, Indicador: "% de evolução da receita bruta", Un_: "%", Melhor_sentido: "⬆", Meta_ultimo_ciclo_avaliado: 10, c2022: 12.5, c2023: 15.0, c2024: 18.0 }
+          ];
+        } else if (tableId === 'Plano_de_Melhorias') {
+          section.records = [
+            { Lacuna_identificada: "Falta de indicadores de custos", O_que_fazer_: "Implementar custeio por absorção", Como_: "Utilizando planilha de rateio", Quem_: "Equipe financeira", Quando_Concluir_: "2026-12-31" }
+          ];
+        } else if (tableId === 'Horas_Capacitacao') {
+          section.records = [
+            { Mes: "01 - Janeiro", No_de_horas_de_capacitacao_realizadas_no_SESCON_: 4, No_horas_de_capacitacao_outras_instituicoes_e_ou_empresas: 8, No_de_Funcionarios: 10, Total_de_horas_de_capacitacao_mes: 120, Media_de_horas_de_capacitacao_funcionario: 12 }
+          ];
+        } else {
+          section.records = [
+            { Nome_da_Empresa: "Hinckel Contabilidade", Email: "hinckel@gmail.com", Avaliador: "Evandro", Criado_por: "Rogério Penna", PERFIL_DA_ORGANIZACAO: "Escritório focado em contabilidade estratégica e consultiva." }
+          ];
+        }
       }
 
       // 2. Load schema columns
@@ -573,7 +595,6 @@
     }
 
     function toggleSectionColumn(sIdx, cIdx) {
-      reportSections[sIdx].columns[cIdx].enabled = !reportSections[sIdx].columns[sIdx]?.enabled; // wait, let's look at index
       const col = reportSections[sIdx].columns[cIdx];
       col.enabled = !col.enabled;
       updatePreview();
@@ -663,43 +684,46 @@
       sheet.style.setProperty('--pdf-theme-color', themeColor);
       sheet.style.setProperty('--pdf-font-size', fontSize);
 
-      // Render all sections in PDF
+      // Render all sections in PDF (Card-based layout)
       const pdfContent = document.getElementById('pdf-sections-content');
       pdfContent.innerHTML = reportSections.map((sec) => {
         const activeCols = sec.columns.filter(c => c.enabled);
         
-        // Headers HTML
-        const headersHtml = activeCols.map(c => {
-          const align = c.widgetOptions?.alignment || 'left';
-          return `<th style="text-align: ${align}">${c.label}</th>`;
+        // Render each record as a vertical card with line-wrapped content
+        const recordsHtml = sec.records.map((row, rIdx) => {
+          return `
+            <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; margin-bottom: 12px; background-color: #ffffff; page-break-inside: avoid; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="font-size: 8pt; font-weight: bold; color: var(--pdf-theme-color, #3b82f6); margin-bottom: 8px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; display: flex; justify-content: space-between;">
+                <span>Registro #${rIdx + 1}</span>
+                <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                ${activeCols.map(c => {
+                  const val = row[c.colId] ?? '';
+                  const align = c.widgetOptions?.alignment || 'left';
+                  const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
+                  const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
+                  const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
+                  const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
+                  
+                  return `
+                    <div style="display: flex; flex-direction: column; gap: 2px; text-align: ${align};">
+                      <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">${c.label}</span>
+                      <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
         }).join('');
 
-        // Rows HTML
-        const rowsHtml = sec.records.map(row => `
-          <tr>
-            ${activeCols.map(c => {
-              const val = row[c.colId] ?? '';
-              const align = c.widgetOptions?.alignment || 'left';
-              const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
-              const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
-              const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
-              const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
-              return `<td style="text-align: ${align}; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}">${val}</td>`;
-            }).join('')}
-          </tr>
-        `).join('');
-
         return `
-          <div class="report-section">
-            <div class="section-title-pdf">${sec.title}</div>
-            <table class="report-table">
-              <thead>
-                <tr>${headersHtml}</tr>
-              </thead>
-              <tbody>
-                ${rowsHtml.length > 0 ? rowsHtml : `<tr><td colspan="${activeCols.length || 1}" style="text-align: center">Nenhum dado</td></tr>`}
-              </tbody>
-            </table>
+          <div class="report-section" style="margin-bottom: 30px;">
+            <div class="section-title-pdf" style="font-size: 13pt; font-weight: 700; color: var(--pdf-theme-color, #3b82f6); border-bottom: 2px solid var(--pdf-theme-color, #3b82f6); padding-bottom: 4px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;">${sec.title}</div>
+            <div>
+              ${recordsHtml.length > 0 ? recordsHtml : `<div style="text-align: center; color: #94a3b8; padding: 20px; border: 1px dashed #e2e8f0; border-radius: 6px;">Nenhum dado cadastrado nesta seção</div>`}
+            </div>
           </div>
         `;
       }).join('');
