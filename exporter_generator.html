@@ -307,7 +307,14 @@
       <div class="form-group">
         <label for="table-select">Tabela Grist</label>
         <select id="table-select" onchange="onTableChange()">
-          <option value="">Carregando tabelas...</option>
+          <option value="Empresa">Empresa</option>
+          <option value="PDCA">PDCA</option>
+          <option value="Resultados">Resultados</option>
+          <option value="Plano_de_Melhorias">Plano_de_Melhorias</option>
+          <option value="Horas_Capacitacao">Horas_Capacitacao</option>
+          <option value="ResumoNotas">ResumoNotas</option>
+          <option value="Practices">Practices</option>
+          <option value="Avaliadores">Avaliadores</option>
         </select>
       </div>
 
@@ -398,12 +405,6 @@
       requiredAccess: 'read table'
     });
 
-    // Run when Grist is fully initialized
-    grist.on('ready', async () => {
-      document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
-      await loadGristMetadata();
-    });
-
     const PQC_FALLBACK_TABLES = [
       { tableId: 'Empresa', id: 'Empresa' },
       { tableId: 'PDCA', id: 'PDCA' },
@@ -414,6 +415,21 @@
       { tableId: 'Practices', id: 'Practices' },
       { tableId: 'Avaliadores', id: 'Avaliadores' }
     ];
+
+    gristTables = PQC_FALLBACK_TABLES;
+
+    // Run when DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
+      onTableChange();
+    });
+
+    // Run when Grist is fully initialized
+    grist.on('ready', async () => {
+      await loadGristMetadata();
+    });
+
+
 
     async function loadGristMetadata() {
       try {
