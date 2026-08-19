@@ -456,24 +456,38 @@
     });
 
     async function loadGristMetadata() {
+      let decodedTables = [];
       try {
         const rawTablesData = await grist.docApi.fetchTable('_grist_Tables');
-        const rawColsData = await grist.docApi.fetchTable('_grist_Tables_column');
-
-        const decodedTables = decodeColumnar(rawTablesData);
-        const decodedCols = decodeColumnar(rawColsData);
-
-        gristTables = decodedTables.filter(t => t.tableId && !t.tableId.startsWith('_'));
-        gristColumns = decodedCols;
-
-        // Auto-add first section if none exist
-        if (reportSections.length === 0 && gristTables.length > 0) {
-          addSection(gristTables[0].tableId);
-        }
+        decodedTables = decodeColumnar(rawTablesData);
       } catch (err) {
-        console.error('Failed to load Grist schema:', err);
-        // Fallback to static mock tables
-        mockMetadata();
+        console.warn('Failed to load _grist_Tables, using PQC fallbacks:', err);
+      }
+
+      // Merge Grist tables with fallback tables to ensure they are always present
+      const tablesMap = new Map();
+      PQC_FALLBACK_TABLES.forEach(t => tablesMap.set(t.tableId, t));
+      decodedTables.forEach(t => {
+        if (t.tableId && !t.tableId.startsWith('_')) {
+          tablesMap.set(t.tableId, t);
+        }
+      });
+      gristTables = Array.from(tablesMap.values());
+
+      try {
+        const rawColsData = await grist.docApi.fetchTable('_grist_Tables_column');
+        gristColumns = decodeColumnar(rawColsData);
+      } catch (err) {
+        console.warn('Failed to load _grist_Tables_column. Columns will be auto-discovered via records:', err);
+        gristColumns = [];
+      }
+
+      // Populate table selector for any setup
+      renderSectionsManager();
+
+      // Auto-add first section if none exist
+      if (reportSections.length === 0 && gristTables.length > 0) {
+        addSection(gristTables[0].tableId);
       }
     }
 
@@ -559,6 +573,7 @@
           .map(c => ({
             colId: c.colId,
             label: c.label || c.colId,
+            useLabel: true,
             type: c.type,
             enabled: true,
             widgetOptions: c.widgetOptions ? (typeof c.widgetOptions === 'string' ? JSON.parse(c.widgetOptions) : c.widgetOptions) : {}
@@ -570,12 +585,13 @@
           .map(key => ({
             colId: key,
             label: key,
+            useLabel: true,
             type: 'Text',
             enabled: true,
             widgetOptions: {}
           }));
       } else {
-        section.columns = [{ colId: 'Nenhum', label: 'Sem colunas', type: 'Text', enabled: true, widgetOptions: {} }];
+        section.columns = [{ colId: 'Nenhum', label: 'Sem colunas', useLabel: true, type: 'Text', enabled: true, widgetOptions: {} }];
       }
     }
 
@@ -597,6 +613,13 @@
     function toggleSectionColumn(sIdx, cIdx) {
       const col = reportSections[sIdx].columns[cIdx];
       col.enabled = !col.enabled;
+      updatePreview();
+    }
+
+    function toggleColumnLabelMode(sIdx, cIdx) {
+      const col = reportSections[sIdx].columns[cIdx];
+      col.useLabel = col.useLabel === false ? true : false;
+      renderSectionsManager();
       updatePreview();
     }
 
@@ -658,9 +681,12 @@
               <div class="column-item">
                 <div class="column-info" onclick="toggleSectionColumn(${sIdx}, ${cIdx})">
                   <input type="checkbox" ${col.enabled ? 'checked' : ''} onclick="event.stopPropagation(); toggleSectionColumn(${sIdx}, ${cIdx});">
-                  <span>${col.label}</span>
+                  <span>${col.useLabel !== false ? col.label : col.colId}</span>
                 </div>
-                <div class="column-actions">
+                <div class="column-actions" style="align-items: center; display: flex; gap: 4px;">
+                  <button class="btn-icon" style="font-size: 0.65rem; padding: 2px 6px; width: auto; border: 1px solid var(--border-color); height: auto; border-radius: 4px;" onclick="toggleColumnLabelMode(${sIdx}, ${cIdx})">
+                    ${col.useLabel !== false ? 'Label' : 'ID'}
+                  </button>
                   <button class="btn-icon" onclick="moveSectionColumn(${sIdx}, ${cIdx}, -1)">▲</button>
                   <button class="btn-icon" onclick="moveSectionColumn(${sIdx}, ${cIdx}, 1)">▼</button>
                 </div>
@@ -706,9 +732,10 @@
                   const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
                   const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
                   
+                  const colName = c.useLabel !== false ? c.label : c.colId;
                   return `
                     <div style="display: flex; flex-direction: column; gap: 2px; text-align: ${align};">
-                      <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">${c.label}</span>
+                      <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">${colName}</span>
                       <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
                     </div>
                   `;
