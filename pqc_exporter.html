@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Exportador de Relatórios PQC-RS</title>
+  <!-- Grist Custom Widget API -->
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --accent: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+
+    .container {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .company-badge {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .company-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .company-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .company-email {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    .no-selection {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-muted);
+      font-size: 0.9375rem;
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status-area {
+      margin-top: 16px;
+      font-size: 0.8125rem;
+      text-align: center;
+      min-height: 20px;
+      color: var(--text-muted);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <h1>Relatório PQC-RS</h1>
+      <p>Exportador de dados completo da empresa selecionada</p>
+    </div>
+
+    <div id="widget-body">
+      <div class="no-selection">
+        Aguardando seleção de empresa no Grist...
+      </div>
+    </div>
+
+    <div class="progress-bar" id="progress-container">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="status-area" id="status-text"></div>
+  </div>
+
+  <script>
+    let currentRecord = null;
+
+    // Initialize Grist Custom Widget API
+    grist.ready({
+      requiredAccess: 'read table'
+    });
+
+    // Handle selected record change
+    grist.onRecord(function(record, mappings) {
+      currentRecord = record;
+      updateUI();
+    });
+
+    function updateUI() {
+      const body = document.getElementById('widget-body');
+      if (!currentRecord || !currentRecord.Nome_da_Empresa) {
+        body.innerHTML = `
+          <div class="no-selection">
+            Nenhuma empresa selecionada no Grist. Selecione uma linha na tabela de Empresas.
+          </div>
+        `;
+        return;
+      }
+
+      body.innerHTML = `
+        <div class="company-badge">
+          <div class="company-label">Empresa Ativa</div>
+          <div class="company-name">${currentRecord.Nome_da_Empresa}</div>
+          <div class="company-email">${currentRecord.Email || 'Sem e-mail cadastrado'}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="btn-excel" onclick="exportData('xlsx')">
+            <span>Exportar Excel (.xlsx)</span>
+          </button>
+          <button class="btn-secondary" id="btn-csv" onclick="exportData('csv')">
+            <span>Backup Planilhas (.csv)</span>
+          </button>
+        </div>
+      `;
+    }
+
+    function updateStatus(text, showSpinner = false) {
+      const statusText = document.getElementById('status-text');
+      if (showSpinner) {
+        statusText.innerHTML = `<span class="spinner"></span> ${text}`;
+      } else {
+        statusText.innerText = text;
+      }
+    }
+
+    function setProgress(percent) {
+      const container = document.getElementById('progress-container');
+      const fill = document.getElementById('progress-fill');
+      if (percent >= 0 && percent < 100) {
+        container.style.display = 'block';
+        fill.style.width = `${percent}%`;
+      } else {
+        container.style.display = 'none';
+        fill.style.width = '0%';
+      }
+    }
+
+    async function exportData(format) {
+      if (!currentRecord) return;
+      
+      const btnExcel = document.getElementById('btn-excel');
+      const btnCsv = document.getElementById('btn-csv');
+      
+      if (btnExcel) btnExcel.disabled = true;
+      if (btnCsv) btnCsv.disabled = true;
+
+      try {
+        const companyId = currentRecord.id;
+        const companyEmail = currentRecord.Email;
+        const companyName = currentRecord.Nome_da_Empresa;
+
+        updateStatus('Buscando dados no Grist...', true);
+        setProgress(10);
+
+        // Fetch related tables from document
+        updateStatus('Carregando Respostas (PDCA)...', true);
+        const pdcaRecords = await grist.docApi.fetchTable('PDCA');
+        setProgress(30);
+
+        updateStatus('Carregando Resultados dos Indicadores...', true);
+        const resultadosRecords = await grist.docApi.fetchTable('Resultados');
+        setProgress(50);
+
+        updateStatus('Carregando Planos de Melhorias...', true);
+        const planoRecords = await grist.docApi.fetchTable('Plano_de_Melhorias');
+        setProgress(70);
+
+        updateStatus('Carregando Horas de Capacitação...', true);
+        const horasRecords = await grist.docApi.fetchTable('Horas_Capacitacao');
+        setProgress(85);
+
+        // Filter records by company reference or email
+        updateStatus('Processando e estruturando dados...', true);
+        
+        const myPdca = (pdcaRecords.records || pdcaRecords).filter(r => {
+          const fields = r.fields || r;
+          return fields.EmpresaRef === companyId || fields.EmpresaRef_Email === companyEmail;
+        }).map(r => r.fields || r);
+
+        const myResultados = (resultadosRecords.records || resultadosRecords).filter(r => {
+          const fields = r.fields || r;
+          return fields.RefEmpresa === companyId || fields.RefEmpresa_UserEmail === companyEmail;
+        }).map(r => r.fields || r);
+
+        const myPlanos = (planoRecords.records || planoRecords).filter(r => {
+          const fields = r.fields || r;
+          return fields.EmpresaRef === companyId || fields.EmpresaRef_UserEmail === companyEmail;
+        }).map(r => r.fields || r);
+
+        const myHoras = (horasRecords.records || horasRecords).filter(r => {
+          const fields = r.fields || r;
+          return fields.RefEmpresa === companyId || fields.RefEmpresa_UserEmail === companyEmail;
+        }).map(r => r.fields || r);
+
+        setProgress(95);
+
+        if (format === 'xlsx') {
+          // Create a new Excel workbook
+          const wb = XLSX.utils.book_new();
+
+          // 1. Info da Empresa Sheet
+          const infoData = [
+            ["INFORMES GERAIS DA EMPRESA - PQC-RS"],
+            [],
+            ["Nome da Empresa", currentRecord.Nome_da_Empresa || ""],
+            ["E-mail", currentRecord.Email || ""],
+            ["Avaliador", currentRecord.Avaliador || ""],
+            ["Criado por", currentRecord.Criado_por || ""],
+            ["Perfil da Organização", currentRecord.PERFIL_DA_ORGANIZACAO || ""]
+          ];
+          const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
+          XLSX.utils.book_append_sheet(wb, wsInfo, "Empresa");
+
+          // 2. PDCA / Práticas Sheet
+          const pdcaHeaders = [
+            "ID Prática", "Nome da Prática", "PLANEJAR (Auto)", "REALIZAR (Auto)", "VERIFICAR (Auto)", "APRENDER (Auto)",
+            "Evidência Planejar", "Evidência Realizar", "Evidência Verificar", "Evidência Aprender", "Nota Prática"
+          ];
+          const pdcaRows = myPdca.map(p => [
+            p.PraticaRef, p.PraticaRef_Nome2 || "", p.PLANEJAR, p.REALIZAR, p.VERIFICAR, p.APRENDER,
+            p.Evidencia_Planejar || "", p.Evidencia_Realizar || "", p.Evidencia_Verificar || "", p.Evidencia_Aprender || "", p.Nota_da_Pratica
+          ]);
+          const wsPdca = XLSX.utils.aoa_to_sheet([pdcaHeaders, ...pdcaRows]);
+          XLSX.utils.book_append_sheet(wb, wsPdca, "Autoavaliação (PDCA)");
+
+          // 3. Resultados / Indicadores Sheet
+          const resHeaders = [
+            "Nº", "Indicador", "Unidade", "Melhor Sentido", "Meta Último Ciclo", "2022", "2023", "2024", "Pontuação", "Plano de Ação"
+          ];
+          const resRows = myResultados.map(r => [
+            r.Num, r.Indicador || "", r.Un_ || "", r.Melhor_sentido || "", r.Meta_ultimo_ciclo_avaliado, r.c2022, r.c2023, r.c2024, r.PONTUACAO, r.PLANO_DE_ACAO || ""
+          ]);
+          const wsRes = XLSX.utils.aoa_to_sheet([resHeaders, ...resRows]);
+          XLSX.utils.book_append_sheet(wb, wsRes, "Indicadores");
+
+          // 4. Plano de Melhorias
+          const planHeaders = ["Lacuna Identificada", "O que fazer?", "Como?", "Quem?", "Quando Concluir?"];
+          const planRows = myPlanos.map(p => [
+            p.Lacuna_identificada || "", p.O_que_fazer_ || "", p.Como_ || "", p.Quem_ || "", p.Quando_Concluir_ || ""
+          ]);
+          const wsPlan = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
+          XLSX.utils.book_append_sheet(wb, wsPlan, "Melhorias");
+
+          // 5. Horas de Capacitação
+          const capHeaders = ["Mês", "Horas SESCON", "Horas Outras Instituições", "Nº Funcionários", "Total Horas Mês", "Média/Funcionário"];
+          const capRows = myHoras.map(h => [
+            h.Mes || "", h.No_de_horas_de_capacitacao_realizadas_no_SESCON_, h.No_horas_de_capacitacao_outras_instituicoes_e_ou_empresas, h.No_de_Funcionarios, h.Total_de_horas_de_capacitacao_mes, h.Media_de_horas_de_capacitacao_funcionario
+          ]);
+          const wsCap = XLSX.utils.aoa_to_sheet([capHeaders, ...capRows]);
+          XLSX.utils.book_append_sheet(wb, wsCap, "Capacitação");
+
+          // Generate file
+          const safeName = companyName.replace(/[^a-zA-Z0-9]/g, '_');
+          const fileName = `PQC_Relatorio_${safeName}.xlsx`;
+          XLSX.writeFile(wb, fileName);
+          updateStatus('Exportação concluída com sucesso!');
+        } else {
+          // CSV ZIP or single exports
+          // We can generate multiple downloads
+          const downloadCSV = (content, filename) => {
+            const blob = new Blob(["\ufeff" + content], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          };
+
+          const toCSV = (headers, rows) => {
+            const csvRows = [headers.join(';')];
+            rows.forEach(row => {
+              const escaped = row.map(v => {
+                if (v === null || v === undefined) return '';
+                const str = String(v).replace(/"/g, '""');
+                return str.includes(';') || str.includes('\n') || str.includes('"') ? `"${str}"` : str;
+              });
+              csvRows.push(escaped.join(';'));
+            });
+            return csvRows.join('\n');
+          };
+
+          const safeName = companyName.replace(/[^a-zA-Z0-9]/g, '_');
+          
+          // Download individual files
+          const pdcaHeaders = ["ID Pratica", "Nome da Pratica", "PLANEJAR", "REALIZAR", "VERIFICAR", "APRENDER", "Evidencia_Planejar", "Evidencia_Realizar", "Evidencia_Verificar", "Evidencia_Aprender", "Nota_Pratica"];
+          const pdcaRows = myPdca.map(p => [p.PraticaRef, p.PraticaRef_Nome2, p.PLANEJAR, p.REALIZAR, p.VERIFICAR, p.APRENDER, p.Evidencia_Planejar, p.Evidencia_Realizar, p.Evidencia_Verificar, p.Evidencia_Aprender, p.Nota_da_Pratica]);
+          downloadCSV(toCSV(pdcaHeaders, pdcaRows), `PQC_PDCA_${safeName}.csv`);
+
+          const resHeaders = ["Num", "Indicador", "Un", "Melhor_sentido", "Meta_ultimo_ciclo", "2022", "2023", "2024", "Pontuacao", "Plano_de_Acao"];
+          const resRows = myResultados.map(r => [r.Num, r.Indicador, r.Un_, r.Melhor_sentido, r.Meta_ultimo_ciclo_avaliado, r.c2022, r.c2023, r.c2024, r.PONTUACAO, r.PLANO_DE_ACAO]);
+          downloadCSV(toCSV(resHeaders, resRows), `PQC_Indicadores_${safeName}.csv`);
+          
+          updateStatus('Downloads de CSV iniciados!');
+        }
+
+      } catch (err) {
+        console.error(err);
+        updateStatus(`Erro na exportação: ${err.message}`);
+      } finally {
+        setProgress(-1);
+        if (btnExcel) btnExcel.disabled = false;
+        if (btnCsv) btnCsv.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

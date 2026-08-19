@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Exportador PQC-RS</title>
+  <!-- Grist Custom Widget API -->
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- html2pdf.js for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --panel-bg: #1e293b;
+      --border-color: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #8b5cf6;
+      --preview-bg: #f1f5f9;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Layout */
+    .left-panel {
+      width: 420px;
+      min-width: 420px;
+      background-color: var(--panel-bg);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .right-panel {
+      flex-grow: 1;
+      background-color: var(--preview-bg);
+      padding: 30px;
+      overflow-y: auto;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* Form & Controls */
+    .panel-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .panel-header p {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .panel-content {
+      padding: 20px;
+      overflow-y: auto;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    select, input[type="text"], textarea {
+      background-color: #0f172a;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: #fff;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      outline: none;
+      width: 100%;
+    }
+
+    select:focus, input[type="text"]:focus, textarea:focus {
+      border-color: var(--primary);
+    }
+
+    /* Column Selector & Ordering */
+    .column-list {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: #0f172a;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .column-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.875rem;
+    }
+
+    .column-item:last-child {
+      border-bottom: none;
+    }
+
+    .column-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      flex-grow: 1;
+    }
+
+    .column-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+    }
+
+    .column-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon:hover {
+      color: #fff;
+      background-color: var(--border-color);
+    }
+
+    /* Action Buttons */
+    .panel-footer {
+      padding: 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-action {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-action:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-outline {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: #fff;
+    }
+
+    .btn-outline:hover {
+      background-color: var(--border-color);
+    }
+
+    /* PDF Paper Preview (A4 portrait proportion) */
+    .paper-container {
+      width: 210mm;
+      min-height: 297mm;
+      background-color: #ffffff;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      padding: 20mm;
+      color: #1e293b;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Report Layout Styles */
+    .report-header {
+      border-bottom: 2px solid var(--pdf-theme-color, #3b82f6);
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+    }
+
+    .report-title {
+      font-size: 20pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .report-subtitle {
+      font-size: 12pt;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .report-meta {
+      font-size: 9pt;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: var(--pdf-font-size, 10pt);
+    }
+
+    .report-table th {
+      background-color: var(--pdf-theme-color, #3b82f6);
+      color: #ffffff;
+      font-weight: 600;
+      text-align: left;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .report-table td {
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+
+    .report-table tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    /* JSON Box */
+    .json-box {
+      font-family: monospace;
+      font-size: 0.75rem;
+      height: 120px;
+      resize: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left Config Panel -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <h1>Gerador de Relatórios PQC</h1>
+      <p>Configure e exporte relatórios em PDF/Excel</p>
+    </div>
+
+    <div class="panel-content">
+      <!-- Table Selector -->
+      <div class="form-group">
+        <label for="table-select">Tabela Grist</label>
+        <select id="table-select" onchange="onTableChange()">
+          <option value="">Carregando tabelas...</option>
+        </select>
+      </div>
+
+      <!-- Report Metadata -->
+      <div class="form-group">
+        <label for="report-title-input">Título do Relatório</label>
+        <input type="text" id="report-title-input" value="Relatório PQC-RS" oninput="updatePreview()">
+      </div>
+
+      <div class="form-group">
+        <label for="report-subtitle-input">Subtítulo</label>
+        <input type="text" id="report-subtitle-input" value="Programa da Qualidade Contábil" oninput="updatePreview()">
+      </div>
+
+      <!-- Colors & Theme -->
+      <div class="form-group">
+        <label for="theme-color-input">Cor de Destaque (Hex)</label>
+        <input type="text" id="theme-color-input" value="#3b82f6" oninput="updatePreview()">
+      </div>
+
+      <div class="form-group">
+        <label for="font-size-select">Tamanho da Fonte</label>
+        <select id="font-size-select" onchange="updatePreview()">
+          <option value="9pt">Pequeno (9pt)</option>
+          <option value="10pt" selected>Médio (10pt)</option>
+          <option value="11pt">Grande (11pt)</option>
+        </select>
+      </div>
+
+      <!-- Columns Selector & Re-orderer -->
+      <div class="form-group">
+        <label>Colunas para Exportação</label>
+        <div class="column-list" id="columns-container">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Config JSON output -->
+      <div class="form-group">
+        <label>Configuração JSON Gerada</label>
+        <textarea class="json-box" id="json-config" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <button class="btn-action" onclick="exportPDF()">
+        <span>Gerar Relatório PDF</span>
+      </button>
+      <button class="btn-action btn-outline" onclick="exportExcel()">
+        <span>Exportar Excel (XLSX)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right Live PDF Preview Panel -->
+  <div class="right-panel">
+    <div class="paper-container" id="pdf-preview-sheet">
+      <div class="report-header" id="pdf-header">
+        <div class="report-title" id="pdf-title">Relatório PQC-RS</div>
+        <div class="report-subtitle" id="pdf-subtitle">Programa da Qualidade Contábil</div>
+      </div>
+      <div class="report-meta">
+        <div>Data: <span id="pdf-date">19/08/2026</span></div>
+        <div>PQC RS</div>
+      </div>
+      <table class="report-table" id="pdf-table">
+        <thead>
+          <tr id="pdf-table-header">
+            <!-- Headers populate dynamically -->
+          </tr>
+        </thead>
+        <tbody id="pdf-table-body">
+          <!-- Rows populate dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let gristTables = [];
+    let gristColumns = [];
+    let selectedTableId = "";
+    let selectedColumns = [];
+    let currentTableData = [];
+
+    // Initialize Grist Custom Widget API
+    grist.ready({
+      requiredAccess: 'read table'
+    });
+
+    // Run when Grist is fully initialized
+    grist.on('ready', async () => {
+      document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
+      await loadGristMetadata();
+    });
+
+    async function loadGristMetadata() {
+      try {
+        // Fetch standard Grist metadata tables
+        const tablesData = await grist.docApi.fetchTable('_grist_Tables');
+        const colsData = await grist.docApi.fetchTable('_grist_Tables_column');
+
+        const rawTables = tablesData.records || tablesData;
+        const rawCols = colsData.records || colsData;
+
+        gristTables = rawTables.map(r => r.fields || r).filter(t => !t.tableId.startsWith('_'));
+        gristColumns = rawCols.map(r => r.fields || r);
+
+        // Populate table selector
+        const tableSelect = document.getElementById('table-select');
+        tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
+
+        if (gristTables.length > 0) {
+          onTableChange();
+        }
+      } catch (err) {
+        console.error('Failed to load Grist schema:', err);
+        // Fallback in case of sandboxed permissions / mock tables
+        mockMetadata();
+      }
+    }
+
+    function mockMetadata() {
+      gristTables = [
+        { tableId: 'Empresa', id: 1 },
+        { tableId: 'PDCA', id: 2 },
+        { tableId: 'Resultados', id: 3 }
+      ];
+      gristColumns = [
+        { parentId: 1, colId: 'Nome_da_Empresa', label: 'Nome da Empresa', type: 'Text' },
+        { parentId: 1, colId: 'Email', label: 'E-mail', type: 'Text' },
+        { parentId: 1, colId: 'Avaliador', label: 'Avaliador', type: 'Text' },
+        { parentId: 2, colId: 'PraticaRef', label: 'ID Prática', type: 'Int' },
+        { parentId: 2, colId: 'PraticaRef_Nome2', label: 'Prática', type: 'Text' },
+        { parentId: 2, colId: 'Nota_da_Pratica', label: 'Nota', type: 'Numeric' }
+      ];
+      const tableSelect = document.getElementById('table-select');
+      tableSelect.innerHTML = gristTables.map(t => `<option value="${t.tableId}">${t.tableId}</option>`).join('');
+      onTableChange();
+    }
+
+    async function onTableChange() {
+      const tableSelect = document.getElementById('table-select');
+      selectedTableId = tableSelect.value;
+      
+      const tableObj = gristTables.find(t => t.tableId === selectedTableId);
+      if (!tableObj) return;
+
+      // Find columns for this table
+      const rawCols = gristColumns.filter(c => c.parentId === tableObj.id || c.parentId === selectedTableId);
+      
+      // Map columns
+      selectedColumns = rawCols
+        .filter(c => c.colId !== 'manualSort' && c.colId !== 'id')
+        .map(c => ({
+          colId: c.colId,
+          label: c.label || c.colId,
+          type: c.type,
+          enabled: true,
+          widgetOptions: c.widgetOptions ? (typeof c.widgetOptions === 'string' ? JSON.parse(c.widgetOptions) : c.widgetOptions) : {}
+        }));
+
+      // Fetch sample records from the chosen table
+      try {
+        const recordsData = await grist.docApi.fetchTable(selectedTableId);
+        const rawRecs = recordsData.records || recordsData;
+        currentTableData = rawRecs.map(r => r.fields || r);
+      } catch (e) {
+        // Mock sample rows
+        currentTableData = [
+          { Nome_da_Empresa: "Hinckel Contabilidade", Email: "contato@hinckel.com", Avaliador: "Marcelo", PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", Nota_da_Pratica: 8.5 },
+          { Nome_da_Empresa: "RS Auditoria", Email: "rs@auditoria.com", Avaliador: "Evandro", PraticaRef: 2, PraticaRef_Nome2: "Processos e PDCA", Nota_da_Pratica: 9.0 }
+        ];
+      }
+
+      renderColumnList();
+      updatePreview();
+    }
+
+    function renderColumnList() {
+      const container = document.getElementById('columns-container');
+      container.innerHTML = selectedColumns.map((col, idx) => `
+        <div class="column-item">
+          <div class="column-info" onclick="toggleColumn(${idx})">
+            <input type="checkbox" ${col.enabled ? 'checked' : ''} onclick="event.stopPropagation(); toggleColumn(${idx});">
+            <span>${col.label}</span>
+          </div>
+          <div class="column-actions">
+            <button class="btn-icon" onclick="moveColumn(${idx}, -1)">▲</button>
+            <button class="btn-icon" onclick="moveColumn(${idx}, 1)">▼</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function toggleColumn(idx) {
+      selectedColumns[idx].enabled = !selectedColumns[idx].enabled;
+      renderColumnList();
+      updatePreview();
+    }
+
+    function moveColumn(idx, direction) {
+      const newIdx = idx + direction;
+      if (newIdx < 0 || newIdx >= selectedColumns.length) return;
+      const temp = selectedColumns[idx];
+      selectedColumns[idx] = selectedColumns[newIdx];
+      selectedColumns[newIdx] = temp;
+      renderColumnList();
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const title = document.getElementById('report-title-input').value;
+      const subtitle = document.getElementById('report-subtitle-input').value;
+      const themeColor = document.getElementById('theme-color-input').value;
+      const fontSize = document.getElementById('font-size-select').value;
+
+      document.getElementById('pdf-title').innerText = title;
+      document.getElementById('pdf-subtitle').innerText = subtitle;
+      
+      const sheet = document.getElementById('pdf-preview-sheet');
+      sheet.style.setProperty('--pdf-theme-color', themeColor);
+      sheet.style.setProperty('--pdf-font-size', fontSize);
+
+      // Generate Live table preview
+      const activeCols = selectedColumns.filter(c => c.enabled);
+      
+      // Render Headers
+      const headerTr = document.getElementById('pdf-table-header');
+      headerTr.innerHTML = activeCols.map(c => {
+        // Capture alignment from Grist column widgetOptions
+        const align = c.widgetOptions?.alignment || 'left';
+        return `<th style="text-align: ${align}">${c.label}</th>`;
+      }).join('');
+
+      // Render Rows
+      const bodyTbody = document.getElementById('pdf-table-body');
+      if (currentTableData.length === 0) {
+        bodyTbody.innerHTML = `<tr><td colspan="${activeCols.length}" style="text-align: center">Nenhum dado encontrado</td></tr>`;
+      } else {
+        bodyTbody.innerHTML = currentTableData.map(row => {
+          return `<tr>
+            ${activeCols.map(c => {
+              const val = row[c.colId] ?? '';
+              const align = c.widgetOptions?.alignment || 'left';
+              const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
+              const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
+              const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
+              const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
+              
+              return `<td style="text-align: ${align}; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}">${val}</td>`;
+            }).join('')}
+          </tr>`;
+        }).join('');
+      }
+
+      // Update generated JSON config box
+      const configJson = {
+        tableId: selectedTableId,
+        title: title,
+        subtitle: subtitle,
+        themeColor: themeColor,
+        fontSize: fontSize,
+        columns: activeCols.map(c => ({
+          colId: c.colId,
+          label: c.label,
+          alignment: c.widgetOptions?.alignment || 'left'
+        }))
+      };
+
+      document.getElementById('json-config').value = JSON.stringify(configJson, null, 2);
+    }
+
+    async function exportPDF() {
+      const sheet = document.getElementById('pdf-preview-sheet');
+      const opt = {
+        margin:       10,
+        filename:     `${selectedTableId}_Relatorio.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Generate the PDF directly from the styled preview element
+      html2pdf().from(sheet).set(opt).save();
+    }
+
+    function exportExcel() {
+      const activeCols = selectedColumns.filter(c => c.enabled);
+      const headers = activeCols.map(c => c.label);
+      const rows = currentTableData.map(row => activeCols.map(c => row[c.colId] ?? ''));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      XLSX.utils.book_append_sheet(wb, ws, selectedTableId);
+      XLSX.writeFile(wb, `${selectedTableId}_Export.xlsx`);
+    }
+  </script>
+</body>
+</html>
