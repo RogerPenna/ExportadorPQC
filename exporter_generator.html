@@ -904,6 +904,7 @@
         }
         if (!sec.colsLayout) sec.colsLayout = 1;
         if (!sec.pageBreak) sec.pageBreak = 'avoid';
+        if (!sec.columnLayout) sec.columnLayout = [];
         sanitizeSections(sec.children, depth + 1);
       }
     }
@@ -1491,8 +1492,80 @@
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
 
+      if (!sec.columnLayout) sec.columnLayout = [];
+
       const container = document.getElementById('drawer-columns-list');
-      container.innerHTML = sec.columns.map((col, idx) => {
+
+      // 1. Group Cards Section (Linhas de Layout)
+      let groupsHtml = `
+        <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <div style="display:flex; justify-space-between; align-items:center; margin-bottom: 10px;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; color: #60a5fa; margin: 0;">Linhas do Registro (Layout em Grupos)</h3>
+          </div>
+          <div style="display:flex; gap:6px; margin-bottom: 10px;">
+            <button class="btn-action" style="font-size: 0.72rem; padding: 4px 8px; flex:1;" onclick="addColumnGroup()">+ Nova Linha</button>
+            <button class="btn-action btn-outline" style="font-size: 0.72rem; padding: 4px 8px; flex:1;" onclick="generateDefaultLayout()">⚡ Auto 1 Coluna/Campo</button>
+          </div>
+          <p style="font-size: 0.72rem; color: #94a3b8; margin-top: 0; margin-bottom: 10px;">
+            Crie linhas horizontais e monte os campos com larguras personalizadas (ex: 4 colunas de 25% para PDCA).
+          </p>
+      `;
+
+      if (sec.columnLayout.length === 0) {
+        groupsHtml += `
+          <div style="text-align: center; font-size: 0.78rem; color: #64748b; padding: 12px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.1); border-radius: 6px;">
+            Nenhuma linha personalizada criada. Clique em <b>+ Nova Linha</b> para colocar campos lado a lado ou <b>⚡ Auto</b> para criar linhas individuais.
+          </div>
+        `;
+      } else {
+        groupsHtml += sec.columnLayout.map((grp, gIdx) => {
+          const totalWidth = grp.cols.reduce((sum, c) => sum + (parseFloat(c.width) || 0), 0);
+          const isOver = totalWidth > 100;
+          return `
+            <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 700; font-size: 0.8rem; color: #f8fafc;">Linha #${gIdx + 1} <span style="font-size:0.7rem; color:${isOver ? '#ef4444' : '#94a3b8'};">(${totalWidth}% total)</span></span>
+                <div style="display: flex; gap: 4px;">
+                  <button class="preview-btn" onclick="moveColumnGroup(${gIdx}, 'up')" title="Mover Linha para Cima">▲</button>
+                  <button class="preview-btn" onclick="moveColumnGroup(${gIdx}, 'down')" title="Mover Linha para Baixo">▼</button>
+                  <button class="preview-btn delete" onclick="removeColumnGroup(${gIdx})" title="Excluir esta Linha">✕</button>
+                </div>
+              </div>
+
+              <!-- Slots in this group -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${grp.cols.map((slot, sIdx) => `
+                  <div style="display: flex; gap: 6px; align-items: center; background: rgba(15, 23, 42, 0.5); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+                    <select style="flex: 1; padding: 4px; font-size: 0.75rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;" onchange="onSlotColChange(${gIdx}, ${sIdx}, this.value)">
+                      <option value="">-- Selecione o Campo --</option>
+                      ${sec.columns.map(c => `<option value="${c.colId}" ${c.colId === slot.colId ? 'selected' : ''}>${c.label} (${c.colId})</option>`).join('')}
+                    </select>
+                    <div style="display:flex; align-items:center; gap:2px;">
+                      <input type="number" min="5" max="100" value="${slot.width || 100}" style="width: 48px; padding: 3px 4px; font-size: 0.75rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px; text-align: center;" onchange="onSlotWidthChange(${gIdx}, ${sIdx}, this.value)">
+                      <span style="font-size: 0.75rem; color: #94a3b8;">%</span>
+                    </div>
+                    <button class="preview-btn delete" style="padding: 2px 6px;" onclick="removeSlotFromGroup(${gIdx}, ${sIdx})" title="Remover Campo">✕</button>
+                  </div>
+                `).join('')}
+              </div>
+
+              <button class="btn-action btn-outline" style="width: 100%; margin-top: 8px; font-size: 0.72rem; padding: 4px;" onclick="addSlotToGroup(${gIdx})">
+                + Adicionar Campo a esta Linha
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+
+      groupsHtml += `</div>`;
+
+      // 2. All Columns Metadata List
+      let colsMetaHtml = `
+        <div>
+          <h3 style="font-size: 0.9rem; font-weight: 700; color: #f8fafc; margin-bottom: 8px;">Configurações de Campos da Tabela</h3>
+      `;
+
+      colsMetaHtml += sec.columns.map((col, idx) => {
         const isFormula = col.type && (col.type.toLowerCase().includes('formula') || col.isFormula);
         return `
           <div class="drawer-column-card" draggable="true" data-index="${idx}" ondragstart="onColumnDragStart(event)" ondragover="onColumnDragOver(event)" ondrop="onColumnDrop(event)" ondragend="onColumnDragEnd(event)">
@@ -1527,6 +1600,90 @@
           </div>
         `;
       }).join('');
+
+      colsMetaHtml += `</div>`;
+
+      container.innerHTML = groupsHtml + colsMetaHtml;
+    }
+
+    function addColumnGroup() {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      if (!sec.columnLayout) sec.columnLayout = [];
+      sec.columnLayout.push({
+        id: 'grp_' + Math.random().toString(36).substring(2, 9),
+        cols: [{ colId: '', width: 100 }]
+      });
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function removeColumnGroup(grpIdx) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout) return;
+      sec.columnLayout.splice(grpIdx, 1);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function moveColumnGroup(grpIdx, dir) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout) return;
+      if (dir === 'up' && grpIdx > 0) {
+        const temp = sec.columnLayout[grpIdx];
+        sec.columnLayout[grpIdx] = sec.columnLayout[grpIdx - 1];
+        sec.columnLayout[grpIdx - 1] = temp;
+      } else if (dir === 'down' && grpIdx < sec.columnLayout.length - 1) {
+        const temp = sec.columnLayout[grpIdx];
+        sec.columnLayout[grpIdx] = sec.columnLayout[grpIdx + 1];
+        sec.columnLayout[grpIdx + 1] = temp;
+      }
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function addSlotToGroup(grpIdx) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout || !sec.columnLayout[grpIdx]) return;
+      sec.columnLayout[grpIdx].cols.push({ colId: '', width: 25 });
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function removeSlotFromGroup(grpIdx, slotIdx) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout || !sec.columnLayout[grpIdx]) return;
+      sec.columnLayout[grpIdx].cols.splice(slotIdx, 1);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function onSlotColChange(grpIdx, slotIdx, colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout || !sec.columnLayout[grpIdx]) return;
+      sec.columnLayout[grpIdx].cols[slotIdx].colId = colId;
+      updatePreview();
+    }
+
+    function onSlotWidthChange(grpIdx, slotIdx, width) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.columnLayout || !sec.columnLayout[grpIdx]) return;
+      const w = parseFloat(width);
+      sec.columnLayout[grpIdx].cols[slotIdx].width = isNaN(w) || w <= 0 ? 100 : w;
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function generateDefaultLayout() {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const activeCols = sec.columns.filter(c => c.enabled !== false);
+      sec.columnLayout = activeCols.map(c => ({
+        id: 'grp_' + Math.random().toString(36).substring(2, 9),
+        cols: [{ colId: c.colId, width: 100 }]
+      }));
+      renderDrawerColumns();
+      updatePreview();
     }
 
     let dragSrcIndex = null;
@@ -1781,6 +1938,13 @@
           maxRecords: sec.maxRecords !== undefined ? sec.maxRecords : 0,
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
+          columnLayout: (sec.columnLayout || []).map(grp => ({
+            id: grp.id,
+            cols: (grp.cols || []).map(c => ({
+              colId: c.colId,
+              width: parseFloat(c.width) || 100
+            }))
+          })),
           columns: sec.columns.map(c => ({
             colId: c.colId,
             label: c.label,
@@ -1867,18 +2031,64 @@
       const cappedRecords = filteredRecords.slice(0, maxRec);
       const isCapped = filteredRecords.length > cappedRecords.length;
 
+      const hasColumnLayout = Array.isArray(sec.columnLayout) && sec.columnLayout.length > 0;
+
       const recordsHtml = cappedRecords.map((row, rIdx) => {
         // Render child sections recursively
         const childrenHtml = sec.children.map(child => renderSectionRecordsHTML(child, row)).join('');
-        const colsClass = `section-cols-${sec.colsLayout || 1}`;
         const pageBreakClass = (sec.pageBreak === 'always' && rIdx > 0) ? ' page-break-before-record' : '';
 
-        return `
-          <div class="pdf-record-card${pageBreakClass}" style="${rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : ''}">
-            <div class="pdf-record-title">
-              <span>Registro #${rIdx + 1}</span>
-              <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
-            </div>
+        let innerContentHtml = '';
+
+        if (hasColumnLayout) {
+          innerContentHtml = sec.columnLayout.map(grp => {
+            const validCols = grp.cols.filter(slot => {
+              if (!slot.colId) return false;
+              const c = sec.columns.find(col => col.colId === slot.colId);
+              return c && c.enabled !== false;
+            });
+
+            if (validCols.length === 0) return '';
+
+            const gridTemplate = validCols.map(s => (s.width || (100 / validCols.length)) + '%').join(' ');
+
+            return `
+              <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: 8px; margin-bottom: 8px; align-items: start;">
+                ${validCols.map(slot => {
+                  const c = sec.columns.find(col => col.colId === slot.colId);
+                  let cellVal = row[c.colId];
+                  const helperColId = 'gristHelper_Display_' + c.colId;
+                  if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
+                    cellVal = row[helperColId];
+                  } else if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
+                    cellVal = resolveRefDisplayValue(cellVal, c.type);
+                  }
+                  const val = formatCellValue(cellVal, c.type);
+                  const align = c.widgetOptions?.alignment || 'left';
+                  const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
+                  const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
+                  const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
+                  const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
+                  const colName = c.useLabel !== false ? c.label : c.colId;
+
+                  return `
+                    <div class="preview-field-container" style="text-align: ${align};">
+                      <div class="preview-field-controls">
+                        <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
+                        <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
+                        <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
+                      </div>
+                      <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">${colName}</span>
+                      <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }).join('');
+        } else {
+          const colsClass = `section-cols-${sec.colsLayout || 1}`;
+          innerContentHtml = `
             <div class="${colsClass}">
               ${activeCols.map(c => {
                 let cellVal = row[c.colId];
@@ -1909,6 +2119,16 @@
                 `;
               }).join('')}
             </div>
+          `;
+        }
+
+        return `
+          <div class="pdf-record-card${pageBreakClass}" style="${rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : ''}">
+            <div class="pdf-record-title">
+              <span>Registro #${rIdx + 1}</span>
+              <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
+            </div>
+            ${innerContentHtml}
             ${childrenHtml ? `<div style="margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--pdf-theme-color, #3b82f6);">${childrenHtml}</div>` : ''}
           </div>
         `;
@@ -2009,9 +2229,14 @@
     window.exportPDF = exportPDF;
     window.exportExcel = exportExcel;
 
-    window.onSectionMaxRecordsChange = onSectionMaxRecordsChange;
-    window.onSectionColsLayoutChange = onSectionColsLayoutChange;
-    window.onSectionPageBreakChange = onSectionPageBreakChange;
+    window.addColumnGroup = addColumnGroup;
+    window.removeColumnGroup = removeColumnGroup;
+    window.moveColumnGroup = moveColumnGroup;
+    window.addSlotToGroup = addSlotToGroup;
+    window.removeSlotFromGroup = removeSlotFromGroup;
+    window.onSlotColChange = onSlotColChange;
+    window.onSlotWidthChange = onSlotWidthChange;
+    window.generateDefaultLayout = generateDefaultLayout;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
