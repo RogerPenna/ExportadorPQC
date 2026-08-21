@@ -845,17 +845,76 @@
     let currentConfigRecord = null;
     let isSaving = false;
 
-    // Cache of table records for reference resolution (TableId -> records array)
-    const tableRecordsCache = {};
+    const tableSchemaCache = {};
 
-    function getRecordDisplayText(row) {
+    async function getTableSchemaCached(tableId) {
+      if (!tableId) return null;
+      if (tableSchemaCache[tableId]) return tableSchemaCache[tableId];
+      try {
+        const schema = await tableLens.getTableSchema(tableId, { mode: 'raw' });
+        tableSchemaCache[tableId] = schema;
+        return schema;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getRecordDisplayText(row, colMeta = null, targetTable = '') {
       if (!row || typeof row !== 'object') return String(row || '');
+
+      // 1. Check if widgetOptions.visibleCol specified a specific column
+      if (colMeta && colMeta.widgetOptions) {
+        const visibleColSpec = colMeta.widgetOptions.visibleCol;
+        if (visibleColSpec !== undefined && visibleColSpec !== null) {
+          if (row[visibleColSpec] !== undefined && row[visibleColSpec] !== null) {
+            return String(row[visibleColSpec]);
+          }
+          const schema = tableSchemaCache[targetTable];
+          if (schema) {
+            for (const [cId, cMeta] of Object.entries(schema)) {
+              if (cMeta && (cMeta.id === visibleColSpec || cId === visibleColSpec)) {
+                if (row[cId] !== undefined && row[cId] !== null) {
+                  return String(row[cId]);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Check if row has exact colId matching colMeta.colId (case-insensitive)
+      if (colMeta && colMeta.colId) {
+        const colId = String(colMeta.colId).toLowerCase();
+        for (const [k, v] of Object.entries(row)) {
+          if (k.toLowerCase() === colId) {
+            if (v !== undefined && v !== null && String(v).trim() !== '') {
+              return String(v);
+            }
+          }
+        }
+      }
+
+      // 3. Check if row has label matching colMeta.label (case-insensitive)
+      if (colMeta && colMeta.label) {
+        const lbl = String(colMeta.label).toLowerCase();
+        for (const [k, v] of Object.entries(row)) {
+          if (k.toLowerCase() === lbl) {
+            if (v !== undefined && v !== null && String(v).trim() !== '') {
+              return String(v);
+            }
+          }
+        }
+      }
+
+      // 4. Preferred keys fallback
       const preferredKeys = ['label', 'Pratica', 'Nome', 'Nome_da_Empresa', 'Name', 'Title', 'Indicador', 'Avaliador', 'Descricao', 'PraticaRef_Nome2'];
       for (const k of preferredKeys) {
         if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
           return String(row[k]);
         }
       }
+
+      // 5. First non-id string fallback
       for (const [k, v] of Object.entries(row)) {
         if (k !== 'id' && k !== 'manualSort' && !k.startsWith('gristHelper_')) {
           if (v !== undefined && v !== null && String(v).trim() !== '') {
@@ -863,10 +922,11 @@
           }
         }
       }
+
       return String(row.id || '');
     }
 
-    function resolveRefDisplayValue(cellVal, colType) {
+    function resolveRefDisplayValue(cellVal, colType, colMeta = null) {
       if (cellVal === undefined || cellVal === null || cellVal === '') return '';
       
       let targetTable = '';
@@ -889,7 +949,7 @@
 
       const lookupId = (id) => {
         const foundRow = targetRecords.find(r => String(r.id) === String(id));
-        if (foundRow) return getRecordDisplayText(foundRow);
+        if (foundRow) return getRecordDisplayText(foundRow, colMeta, targetTable);
         return String(id);
       };
 
@@ -1517,11 +1577,14 @@
       for (const col of section.columns) {
         if (col.type && (col.type.startsWith('Ref:') || col.type.startsWith('RefList:'))) {
           const targetTable = col.type.startsWith('Ref:') ? col.type.substring(4).trim() : col.type.substring(8).trim();
-          if (targetTable && !tableRecordsCache[targetTable]) {
+          if (targetTable) {
             try {
-              const rawTarget = await grist.docApi.fetchTable(targetTable);
-              tableRecordsCache[targetTable] = decodeColumnar(rawTarget);
-              logDebug(`Tabela de referência '${targetTable}' pré-carregada (${tableRecordsCache[targetTable].length} registros).`);
+              if (!tableRecordsCache[targetTable]) {
+                const rawTarget = await grist.docApi.fetchTable(targetTable);
+                tableRecordsCache[targetTable] = decodeColumnar(rawTarget);
+                logDebug(`Tabela de referência '${targetTable}' pré-carregada (${tableRecordsCache[targetTable].length} registros).`);
+              }
+              await getTableSchemaCached(targetTable);
             } catch (err) {
               logDebug(`Aviso ao carregar tabela de referência '${targetTable}': ${err.message}`);
             }
@@ -2413,7 +2476,7 @@
               if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
                 cellVal = row[helperColId];
               } else if (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:'))) {
-                cellVal = resolveRefDisplayValue(cellVal, colMeta.type);
+                cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMeta);
               }
               const val = formatCellValue(cellVal, colMeta.type);
               const align = colMeta.widgetOptions?.alignment || 'left';
@@ -2453,7 +2516,7 @@
             if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
               cellVal = row[helperColId];
             } else if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
-              cellVal = resolveRefDisplayValue(cellVal, c.type);
+              cellVal = resolveRefDisplayValue(cellVal, c.type, c);
             }
             const val = formatCellValue(cellVal, c.type);
             const align = c.widgetOptions?.alignment || 'left';
