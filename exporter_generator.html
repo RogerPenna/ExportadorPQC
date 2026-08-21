@@ -863,6 +863,18 @@
     function getRecordDisplayText(row, colMeta = null, targetTable = '') {
       if (!row || typeof row !== 'object') return String(row || '');
 
+      // 0. Check if user manually selected a specific refTargetCol
+      if (colMeta && colMeta.refTargetCol) {
+        const target = String(colMeta.refTargetCol).toLowerCase();
+        for (const [k, v] of Object.entries(row)) {
+          if (k.toLowerCase() === target) {
+            if (v !== undefined && v !== null && String(v).trim() !== '') {
+              return String(v);
+            }
+          }
+        }
+      }
+
       // 1. Check if widgetOptions.visibleCol specified a specific column
       if (colMeta && colMeta.widgetOptions) {
         const visibleColSpec = colMeta.widgetOptions.visibleCol;
@@ -1150,7 +1162,8 @@
             label: c.label,
             useLabel: c.useLabel !== false,
             enabled: c.enabled === true,
-            customLabel: c.customLabel || null
+            customLabel: c.customLabel || null,
+            refTargetCol: c.refTargetCol || null
           })),
           children: buildConfigJson(sec.children)
         }));
@@ -1383,6 +1396,8 @@
                   useLabel: saved.useLabel,
                   type: gristMeta.type,
                   enabled: saved.enabled,
+                  customLabel: saved.customLabel || null,
+                  refTargetCol: saved.refTargetCol || null,
                   groupId: saved.groupId || null,
                   widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
                 });
@@ -1397,6 +1412,9 @@
                 useLabel: true,
                 type: gristMeta.type,
                 enabled: true,
+                customLabel: null,
+                refTargetCol: null,
+                groupId: null,
                 widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
               });
             }
@@ -1782,6 +1800,7 @@
                   const col = sec.columns.find(c => c.colId === slot.colId);
                   const label = col ? (col.customLabel || col.label) : slot.colId;
                   const isAlt = col && col.customLabel;
+                  const isRefSel = col && col.refTargetCol;
                   return `
                     <div data-slot-colid="${slot.colId}" style="display: flex; gap: 4px; align-items: center; background: rgba(30, 41, 59, 0.9); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3); position: relative;" onmousedown="event.stopPropagation()">
                       <span style="color: var(--text-muted); font-size:0.8rem; cursor: pointer; padding: 2px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);" onclick="toggleCardContextMenu(event, '${slot.colId}')" title="Clique para abrir Menu">☰</span>
@@ -1789,6 +1808,7 @@
                       <span style="flex:1; font-size:0.75rem; color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                         ${label} <span style="color:#64748b; font-weight:normal;">(${slot.colId})</span>
                         ${isAlt ? `<span style="color:#fbbf24; font-size:0.68rem; font-weight:normal;"> (alt)</span>` : ''}
+                        ${isRefSel ? `<span style="color:#60a5fa; font-size:0.68rem; font-weight:normal;"> (Ref: ${col.refTargetCol})</span>` : ''}
                       </span>
                       <div style="display:flex; align-items:center; gap:2px;">
                         <button class="preview-btn" style="padding: 2px 4px; font-size: 0.7rem; background: ${slot.locked ? '#1e3a8a' : '#0f172a'}; border-color: ${slot.locked ? '#3b82f6' : '#334155'}; color: ${slot.locked ? '#60a5fa' : '#94a3b8'};" onclick="toggleColLockInGroup('${item.id}', '${slot.colId}')" title="${slot.locked ? 'Bloqueada (🔒 clique para desbloquear)' : 'Desbloqueada (🔓 clique para travar %)'}">
@@ -1831,6 +1851,7 @@
                   <span style="font-family: monospace; color: #fff; font-size: 0.8rem; font-weight: 600;">${col.colId}</span>
                   ${isFormula ? '<span class="column-tag formula">Fórmula</span>' : `<span class="column-tag">${col.type || 'Texto'}</span>`}
                   ${col.customLabel ? `<span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 1px 4px; border-radius: 4px;" title="Rótulo Alternativo: ${col.customLabel}">Rótulo Alt.</span>` : ''}
+                  ${col.refTargetCol ? `<span style="font-size: 0.65rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); padding: 1px 4px; border-radius: 4px;" title="Exibindo coluna da referência: ${col.refTargetCol}">🔗 Exibe: ${col.refTargetCol}</span>` : ''}
 
                   ${renderCardContextMenuHTML(col.colId, false, null, null, itemIdx)}
                 </div>
@@ -1852,7 +1873,7 @@
               <!-- Line 2: 2 columns (Label on left, Group Dropdown on right) -->
               <div style="display: flex; gap: 8px; align-items: center; margin-top: 5px;">
                 <div style="flex: 1; font-size: 0.72rem; color: ${col.customLabel ? '#fbbf24' : '#60a5fa'}; background: ${col.customLabel ? 'rgba(245, 158, 11, 0.08)' : 'rgba(59, 165, 250, 0.05)'}; padding: 3px 6px; border-radius: 4px; border: 1px solid ${col.customLabel ? 'rgba(245, 158, 11, 0.25)' : 'rgba(59, 165, 250, 0.1)'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Rótulo no Relatório: ${col.customLabel || col.label}">
-                  Rótulo: <b>${col.customLabel || col.label}</b> ${col.customLabel ? `<span style="color:#94a3b8; font-size:0.68rem; font-weight:normal;">(Grist: ${col.label})</span>` : ''}
+                  Rótulo: <b>${col.customLabel || col.label}</b> ${col.customLabel ? `<span style="color:#94a3b8; font-size:0.68rem; font-weight:normal;">(Grist: ${col.label})</span>` : ''} ${col.refTargetCol ? `<span style="color:#60a5fa; font-size:0.68rem; font-weight:normal;"> (Ref $\rightarrow$ ${col.refTargetCol})</span>` : ''}
                 </div>
 
                 <div style="width: 140px;">
@@ -2367,7 +2388,8 @@
             label: c.label,
             useLabel: c.useLabel !== false,
             enabled: c.enabled !== false,
-            customLabel: c.customLabel || null
+            customLabel: c.customLabel || null,
+            refTargetCol: c.refTargetCol || null
           })),
           children: buildConfigJson(sec.children)
         }));
@@ -2759,6 +2781,18 @@
             <span>👁️</span> <span>${col.enabled !== false ? 'Ocultar no Relatório' : 'Exibir no Relatório'}</span>
           </div>
 
+          ${(col.type && (col.type.startsWith('Ref:') || col.type.startsWith('RefList:'))) ? `
+            <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
+            <div onclick="promptRefTargetCol('${colId}')" class="ctx-btn" style="color: #60a5fa;">
+              <span>🔗</span> <span>${col.refTargetCol ? 'Alterar Coluna Referenciada' : 'Escolher Coluna da Referência'}</span>
+            </div>
+            ${col.refTargetCol ? `
+              <div onclick="clearRefTargetCol('${colId}')" class="ctx-btn" style="color: #f87171;">
+                <span>🗑️</span> <span>Restaurar Referência Padrão</span>
+              </div>
+            ` : ''}
+          ` : ''}
+
           <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
 
           ${isGroupSlot ? `
@@ -2883,7 +2917,78 @@
       }
     });
 
+    async function promptRefTargetCol(colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const col = (sec.columns || []).find(c => c.colId === colId);
+      if (!col || !col.type) return;
+
+      let targetTable = '';
+      if (col.type.startsWith('Ref:')) targetTable = col.type.substring(4).trim();
+      else if (col.type.startsWith('RefList:')) targetTable = col.type.substring(8).trim();
+
+      if (!targetTable) {
+        alert('Tabela referenciada não identificada.');
+        return;
+      }
+
+      const schema = await getTableSchemaCached(targetTable);
+      const availableCols = schema ? Object.keys(schema).filter(k => k !== 'id' && k !== 'manualSort' && !k.startsWith('gristHelper_')) : [];
+
+      if (availableCols.length === 0) {
+        alert(`Não foi possível carregar a lista de colunas da tabela '${targetTable}'.`);
+        return;
+      }
+
+      const promptMsg = `Escolha qual coluna da tabela '${targetTable}' você deseja exibir:\n\n` +
+        availableCols.map((c, i) => `${i + 1}. ${c}`).join('\n') +
+        `\n\nDigite o NOME da coluna (ou o número de 1 a ${availableCols.length}):`;
+
+      const currentVal = col.refTargetCol || availableCols[0];
+      const userInput = prompt(promptMsg, currentVal);
+
+      if (userInput !== null) {
+        const trimmed = userInput.trim();
+        let selectedCol = null;
+
+        const idx = parseInt(trimmed, 10);
+        if (!isNaN(idx) && idx >= 1 && idx <= availableCols.length) {
+          selectedCol = availableCols[idx - 1];
+        } else {
+          const matched = availableCols.find(c => c.toLowerCase() === trimmed.toLowerCase());
+          if (matched) selectedCol = matched;
+        }
+
+        if (selectedCol) {
+          col.refTargetCol = selectedCol;
+          logDebug(`Coluna de referência definida manualmente: ${colId} -> ${targetTable}.${selectedCol}`);
+        } else if (trimmed === '') {
+          delete col.refTargetCol;
+        } else {
+          alert(`Coluna '${trimmed}' não encontrada na tabela '${targetTable}'.`);
+        }
+
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function clearRefTargetCol(colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const col = (sec.columns || []).find(c => c.colId === colId);
+      if (col) {
+        delete col.refTargetCol;
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
     // Expose functions globally for HTML event handlers in ES Module scope
+    window.promptRefTargetCol = promptRefTargetCol;
+    window.clearRefTargetCol = clearRefTargetCol;
     window.moveLayoutItemSteps = moveLayoutItemSteps;
     window.moveColInsideGroupSteps = moveColInsideGroupSteps;
     window.toggleCardContextMenu = toggleCardContextMenu;
