@@ -904,7 +904,12 @@
         }
         if (!sec.colsLayout) sec.colsLayout = 1;
         if (!sec.pageBreak) sec.pageBreak = 'avoid';
-        if (!sec.columnGroups) sec.columnGroups = [];
+
+        // Migrate / initialize layoutItems
+        if (!sec.layoutItems || sec.layoutItems.length === 0) {
+          sec.layoutItems = (sec.columns || []).map(c => ({ type: 'column', colId: c.colId }));
+        }
+
         sanitizeSections(sec.children, depth + 1);
       }
     }
@@ -1490,48 +1495,77 @@
       activeDrawerSectionId = null;
     }
 
+    function syncLayoutItems(sec) {
+      if (!sec.layoutItems) sec.layoutItems = [];
+
+      const trackedCols = new Set();
+      sec.layoutItems.forEach(item => {
+        if (item.type === 'column') {
+          trackedCols.add(item.colId);
+        } else if (item.type === 'group' && item.cols) {
+          item.cols.forEach(c => trackedCols.add(c.colId));
+        }
+      });
+
+      const existingColIds = new Set((sec.columns || []).map(c => c.colId));
+      sec.layoutItems = sec.layoutItems.filter(item => {
+        if (item.type === 'column') return existingColIds.has(item.colId);
+        if (item.type === 'group') {
+          item.cols = (item.cols || []).filter(c => existingColIds.has(c.colId));
+          return true;
+        }
+        return false;
+      });
+
+      (sec.columns || []).forEach(c => {
+        if (!trackedCols.has(c.colId)) {
+          sec.layoutItems.push({ type: 'column', colId: c.colId });
+        }
+      });
+    }
+
     function renderDrawerColumns() {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
 
-      if (!sec.columnGroups) sec.columnGroups = [];
+      syncLayoutItems(sec);
 
       const container = document.getElementById('drawer-columns-list');
 
       let html = `
-        <div style="margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-          <div style="display:flex; gap:8px;">
-            <button class="btn-action" style="font-size: 0.75rem; padding: 6px 10px; flex:1;" onclick="createColumnGroup()">+ Criar Grupo de Colunas Lado a Lado</button>
-          </div>
+        <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <button class="btn-action" style="width: 100%; font-size: 0.78rem; padding: 7px 10px;" onclick="createColumnGroup()">+ Criar Grupo de Colunas Lado a Lado</button>
           <p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px; margin-bottom: 0;">
-            Arraste ou atribua colunas aos Grupos para exibi-las em paralelo (ex: 4 colunas de 25% para o PDCA).
+            Reordene linhas e grupos abaixo. Adicione colunas aos grupos para exibi-las em paralelo (ex: 4 colunas de 25% para o PDCA).
           </p>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
       `;
 
-      // Render Group Cards at the top
-      if (sec.columnGroups.length > 0) {
-        sec.columnGroups.forEach((grp, gIdx) => {
-          const groupCols = grp.cols || [];
+      sec.layoutItems.forEach((item, itemIdx) => {
+        if (item.type === 'group') {
+          const groupCols = item.cols || [];
           const totalWidth = groupCols.reduce((sum, c) => sum + (parseFloat(c.width) || 0), 0);
           const isOver = totalWidth > 100;
 
           html += `
-            <div class="drawer-column-card" style="background: rgba(30, 41, 59, 0.9); border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px; margin-bottom: 4px;" ondragover="onGroupDragOver(event)" ondrop="onGroupDrop(event, '${grp.id}')">
+            <div class="drawer-column-card" draggable="true" data-layout-index="${itemIdx}" ondragstart="onLayoutItemDragStart(event)" ondragover="onLayoutItemDragOver(event)" ondrop="onLayoutItemDrop(event, '${item.id}')" ondragend="onLayoutItemDragEnd(event)" style="background: rgba(30, 41, 59, 0.95); border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px; margin-bottom: 2px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div style="display:flex; align-items:center; gap:6px;">
-                  <span style="color: #60a5fa; font-weight: 700; font-size: 0.85rem;">📦 ${grp.title || ('Grupo #' + (gIdx + 1))}</span>
+                  <span style="color: var(--text-muted); cursor: grab; font-size:0.9rem;">☰</span>
+                  <span style="color: #60a5fa; font-weight: 700; font-size: 0.85rem;">📦 ${item.title || 'Grupo de Colunas'}</span>
                   <span style="font-size:0.7rem; color:${isOver ? '#ef4444' : '#94a3b8'};">(${totalWidth}% total)</span>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                  <button class="preview-btn delete" onclick="removeColumnGroup('${grp.id}')" title="Excluir este Grupo (libera as colunas)">✕</button>
+                  <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'up')" title="Mover Grupo para Cima">▲</button>
+                  <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'down')" title="Mover Grupo para Baixo">▼</button>
+                  <button class="preview-btn delete" onclick="removeColumnGroup('${item.id}')" title="Excluir este Grupo (libera as colunas)">✕</button>
                 </div>
               </div>
 
               <!-- Columns inside this group -->
-              <div style="display: flex; flex-direction: column; gap: 6px; min-height: 40px; padding: 4px; background: rgba(15, 23, 42, 0.5); border-radius: 6px;">
-                ${groupCols.length === 0 ? `<div style="text-align:center; font-size:0.72rem; color:#64748b; padding:8px;">Solte ou adicione colunas aqui</div>` : ''}
+              <div style="display: flex; flex-direction: column; gap: 6px; min-height: 36px; padding: 6px; background: rgba(15, 23, 42, 0.6); border-radius: 6px;">
+                ${groupCols.length === 0 ? `<div style="text-align:center; font-size:0.72rem; color:#64748b; padding:6px;">Arraste ou selecione colunas para colocar dentro deste grupo</div>` : ''}
                 ${groupCols.map((slot, sIdx) => {
                   const col = sec.columns.find(c => c.colId === slot.colId);
                   const label = col ? col.label : slot.colId;
@@ -1540,7 +1574,7 @@
                       <span style="color: var(--text-muted); cursor: grab; font-size:0.8rem;">☰</span>
                       <span style="flex:1; font-size:0.75rem; color:#fff; font-weight:600;">${label} <span style="color:#64748b; font-weight:normal;">(${slot.colId})</span></span>
                       <div style="display:flex; align-items:center; gap:2px;">
-                        <input type="number" min="5" max="100" value="${slot.width || 25}" style="width: 44px; padding: 2px 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px; text-align: center;" onchange="onGroupColWidthChange('${grp.id}', '${slot.colId}', this.value)">
+                        <input type="number" min="5" max="100" value="${slot.width || 25}" style="width: 44px; padding: 2px 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px; text-align: center;" onchange="onGroupColWidthChange('${item.id}', '${slot.colId}', this.value)">
                         <span style="font-size: 0.72rem; color: #94a3b8;">%</span>
                       </div>
                       <button class="preview-btn delete" style="padding: 2px 6px;" onclick="moveColumnToGroup('${slot.colId}', null)" title="Remover do Grupo">✕</button>
@@ -1549,58 +1583,64 @@
                 }).join('')}
               </div>
 
-              <!-- Quick add dropdown inside group -->
+              <!-- Dropdown to quickly add any column -->
               <div style="margin-top: 8px;">
-                <select style="width: 100%; padding: 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;" onchange="if(this.value){ moveColumnToGroup(this.value, '${grp.id}'); this.value=''; }">
+                <select style="width: 100%; padding: 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;" onchange="if(this.value){ moveColumnToGroup(this.value, '${item.id}'); this.value=''; }">
                   <option value="">+ Adicionar Campo a este Grupo...</option>
-                  ${sec.columns.filter(c => c.groupId !== grp.id).map(c => `<option value="${c.colId}">${c.label} (${c.colId})</option>`).join('')}
+                  ${sec.columns.filter(c => {
+                    return !item.cols.some(s => s.colId === c.colId);
+                  }).map(c => `<option value="${c.colId}">${c.label} (${c.colId})</option>`).join('')}
                 </select>
               </div>
             </div>
           `;
-        });
-      }
+        } else if (item.type === 'column') {
+          const colIdx = sec.columns.findIndex(c => c.colId === item.colId);
+          if (colIdx === -1) return;
+          const col = sec.columns[colIdx];
+          const isFormula = col.type && (col.type.toLowerCase().includes('formula') || col.isFormula);
+          const availableGroups = sec.layoutItems.filter(i => i.type === 'group');
 
-      // Render standard column cards list below
-      html += sec.columns.map((col, idx) => {
-        const isFormula = col.type && (col.type.toLowerCase().includes('formula') || col.isFormula);
-        const inGroup = sec.columnGroups.find(g => g.id === col.groupId);
-        return `
-          <div class="drawer-column-card ${inGroup ? 'in-group' : ''}" draggable="true" data-index="${idx}" data-colid="${col.colId}" ondragstart="onColumnDragStart(event)" ondragover="onColumnDragOver(event)" ondrop="onColumnDrop(event)" ondragend="onColumnDragEnd(event)" style="${inGroup ? 'opacity: 0.6; border-left: 3px solid #60a5fa;' : ''}">
-            <div class="drawer-column-card-header">
-              <div class="drawer-column-title">
-                <span style="color: var(--text-muted); cursor: grab; margin-right: 4px;">☰</span>
-                <span style="font-family: monospace; color: #fff;">${col.colId}</span>
-                ${isFormula ? '<span class="column-tag formula">Fórmula</span>' : `<span class="column-tag">${col.type || 'Texto'}</span>`}
-                ${inGroup ? `<span class="column-tag" style="background:#1e3a8a; color:#93c5fd;">Em: ${inGroup.title || 'Grupo'}</span>` : ''}
+          html += `
+            <div class="drawer-column-card" draggable="true" data-layout-index="${itemIdx}" data-colid="${col.colId}" ondragstart="onLayoutItemDragStart(event)" ondragover="onLayoutItemDragOver(event)" ondrop="onLayoutItemDrop(event, null)" ondragend="onLayoutItemDragEnd(event)">
+              <div class="drawer-column-card-header">
+                <div class="drawer-column-title">
+                  <span style="color: var(--text-muted); cursor: grab; margin-right: 4px;">☰</span>
+                  <span style="font-family: monospace; color: #fff;">${col.colId}</span>
+                  ${isFormula ? '<span class="column-tag formula">Fórmula</span>' : `<span class="column-tag">${col.type || 'Texto'}</span>`}
+                </div>
+                <div style="display: flex; gap: 3px;">
+                  <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'up')" title="Mover para Cima">▲</button>
+                  <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'down')" title="Mover para Baixo">▼</button>
+                </div>
+              </div>
+              
+              <div style="font-size: 0.75rem; color: #60a5fa; background-color: rgba(59, 165, 250, 0.05); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(59, 165, 250, 0.1);">
+                Rótulo: ${col.label}
+              </div>
+
+              <div class="drawer-column-options">
+                <label class="drawer-option-toggle">
+                  <input type="checkbox" ${col.enabled !== false ? 'checked' : ''} onchange="toggleDrawerColumnEnabled(${colIdx})">
+                  <span>Ativa</span>
+                </label>
+                
+                <label class="drawer-option-toggle">
+                  <input type="checkbox" ${col.useLabel !== false ? 'checked' : ''} onchange="toggleDrawerColumnLabelMode(${colIdx})">
+                  <span>Usar Rótulo</span>
+                </label>
+
+                ${availableGroups.length > 0 ? `
+                  <select style="font-size: 0.7rem; padding: 2px 4px; background: #0f172a; color: #93c5fd; border: 1px solid #334155; border-radius: 4px;" onchange="if(this.value){ moveColumnToGroup('${col.colId}', this.value); }">
+                    <option value="">+ Colocar no Grupo...</option>
+                    ${availableGroups.map(g => `<option value="${g.id}">${g.title || 'Grupo'}</option>`).join('')}
+                  </select>
+                ` : ''}
               </div>
             </div>
-            
-            <div style="font-size: 0.75rem; color: #60a5fa; background-color: rgba(59, 165, 250, 0.05); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(59, 165, 250, 0.1);">
-              Rótulo: ${col.label}
-            </div>
-
-            <div class="drawer-column-options">
-              <label class="drawer-option-toggle">
-                <input type="checkbox" ${col.enabled !== false ? 'checked' : ''} onchange="toggleDrawerColumnEnabled(${idx})">
-                <span>Ativa</span>
-              </label>
-              
-              <label class="drawer-option-toggle">
-                <input type="checkbox" ${col.useLabel !== false ? 'checked' : ''} onchange="toggleDrawerColumnLabelMode(${idx})">
-                <span>Usar Rótulo</span>
-              </label>
-
-              ${sec.columnGroups.length > 0 ? `
-                <select style="font-size: 0.7rem; padding: 2px 4px; background: #0f172a; color: #93c5fd; border: 1px solid #334155; border-radius: 4px;" onchange="moveColumnToGroup('${col.colId}', this.value || null)">
-                  <option value="">-- Sem Grupo --</option>
-                  ${sec.columnGroups.map(g => `<option value="${g.id}" ${col.groupId === g.id ? 'selected' : ''}>${g.title || 'Grupo'}</option>`).join('')}
-                </select>
-              ` : ''}
-            </div>
-          </div>
-        `;
-      }).join('');
+          `;
+        }
+      });
 
       html += `</div>`;
 
@@ -1610,26 +1650,78 @@
     function createColumnGroup() {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
-      if (!sec.columnGroups) sec.columnGroups = [];
+      syncLayoutItems(sec);
       const grpId = 'grp_' + Math.random().toString(36).substring(2, 9);
+      const numGrps = sec.layoutItems.filter(i => i.type === 'group').length + 1;
       const newGrp = {
+        type: 'group',
         id: grpId,
-        title: 'Grupo #' + (sec.columnGroups.length + 1),
+        title: 'Grupo #' + numGrps,
         cols: []
       };
-      sec.columnGroups.unshift(newGrp); // Add to TOP
+      sec.layoutItems.unshift(newGrp); // Add to TOP
       renderDrawerColumns();
       updatePreview();
     }
 
+    function moveLayoutItem(index, direction) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+
+      if (direction === 'up' && index > 0) {
+        const temp = sec.layoutItems[index];
+        sec.layoutItems[index] = sec.layoutItems[index - 1];
+        sec.layoutItems[index - 1] = temp;
+      } else if (direction === 'down' && index < sec.layoutItems.length - 1) {
+        const temp = sec.layoutItems[index];
+        sec.layoutItems[index] = sec.layoutItems[index + 1];
+        sec.layoutItems[index + 1] = temp;
+      }
+
+      updateColumnsOrderFromLayout(sec);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function updateColumnsOrderFromLayout(sec) {
+      const newColOrder = [];
+      const colMap = new Map((sec.columns || []).map(c => [c.colId, c]));
+
+      sec.layoutItems.forEach(item => {
+        if (item.type === 'column') {
+          const col = colMap.get(item.colId);
+          if (col) {
+            newColOrder.push(col);
+            colMap.delete(item.colId);
+          }
+        } else if (item.type === 'group' && item.cols) {
+          item.cols.forEach(slot => {
+            const col = colMap.get(slot.colId);
+            if (col) {
+              newColOrder.push(col);
+              colMap.delete(slot.colId);
+            }
+          });
+        }
+      });
+
+      colMap.forEach(col => newColOrder.push(col));
+      sec.columns = newColOrder;
+    }
+
     function removeColumnGroup(groupId) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
-      if (!sec) return;
-      // Release all columns in this group
-      sec.columns.forEach(c => {
-        if (c.groupId === groupId) c.groupId = null;
-      });
-      sec.columnGroups = (sec.columnGroups || []).filter(g => g.id !== groupId);
+      if (!sec || !sec.layoutItems) return;
+
+      const grpIdx = sec.layoutItems.findIndex(i => i.type === 'group' && i.id === groupId);
+      if (grpIdx === -1) return;
+
+      const grp = sec.layoutItems[grpIdx];
+      const releasedItems = (grp.cols || []).map(slot => ({ type: 'column', colId: slot.colId }));
+
+      sec.layoutItems.splice(grpIdx, 1, ...releasedItems);
+      updateColumnsOrderFromLayout(sec);
+
       renderDrawerColumns();
       updatePreview();
     }
@@ -1637,39 +1729,52 @@
     function moveColumnToGroup(colId, targetGroupId) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
+      syncLayoutItems(sec);
 
-      const col = sec.columns.find(c => c.colId === colId);
-      if (!col) return;
-
-      // Remove from previous group if any
-      if (col.groupId) {
-        const prevGrp = (sec.columnGroups || []).find(g => g.id === col.groupId);
-        if (prevGrp) {
-          prevGrp.cols = prevGrp.cols.filter(c => c.colId !== colId);
+      let sourceGroup = null;
+      sec.layoutItems.forEach(item => {
+        if (item.type === 'group' && item.cols) {
+          const slotIdx = item.cols.findIndex(s => s.colId === colId);
+          if (slotIdx !== -1) {
+            sourceGroup = item;
+            item.cols.splice(slotIdx, 1);
+          }
         }
+      });
+
+      const standaloneIdx = sec.layoutItems.findIndex(i => i.type === 'column' && i.colId === colId);
+      if (standaloneIdx !== -1) {
+        sec.layoutItems.splice(standaloneIdx, 1);
       }
 
-      col.groupId = targetGroupId || null;
-
       if (targetGroupId) {
-        const targetGrp = (sec.columnGroups || []).find(g => g.id === targetGroupId);
+        const targetGrp = sec.layoutItems.find(i => i.type === 'group' && i.id === targetGroupId);
         if (targetGrp) {
+          if (!targetGrp.cols) targetGrp.cols = [];
           const numCols = targetGrp.cols.length + 1;
           const defaultWidth = numCols === 4 ? 25 : (numCols === 3 ? 33.3 : (numCols === 2 ? 50 : 100));
           targetGrp.cols.push({ colId: colId, width: defaultWidth });
         }
+      } else {
+        let insertIdx = sec.layoutItems.length;
+        if (sourceGroup) {
+          const sIdx = sec.layoutItems.findIndex(i => i.type === 'group' && i.id === sourceGroup.id);
+          if (sIdx !== -1) insertIdx = sIdx + 1;
+        }
+        sec.layoutItems.splice(insertIdx, 0, { type: 'column', colId: colId });
       }
 
+      updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
     }
 
     function onGroupColWidthChange(groupId, colId, width) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
-      if (!sec || !sec.columnGroups) return;
-      const grp = sec.columnGroups.find(g => g.id === groupId);
-      if (!grp) return;
-      const slot = grp.cols.find(c => c.colId === colId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (!grp || !grp.cols) return;
+      const slot = grp.cols.find(s => s.colId === colId);
       if (slot) {
         const w = parseFloat(width);
         slot.width = isNaN(w) || w <= 0 ? 25 : w;
@@ -1678,27 +1783,42 @@
       }
     }
 
-    function onGroupDragOver(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    }
+    let dragLayoutIndex = null;
 
-    function onGroupDrop(e, groupId) {
-      e.preventDefault();
-      const colId = e.dataTransfer.getData('text/plain');
-      if (colId) {
-        moveColumnToGroup(colId, groupId);
-      }
-    }
-
-    let dragSrcIndex = null;
-
-    function onColumnDragStart(e) {
-      dragSrcIndex = parseInt(e.currentTarget.getAttribute('data-index'));
+    function onLayoutItemDragStart(e) {
+      dragLayoutIndex = parseInt(e.currentTarget.getAttribute('data-layout-index'));
       const colId = e.currentTarget.getAttribute('data-colid');
       if (colId) e.dataTransfer.setData('text/plain', colId);
       e.currentTarget.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function onLayoutItemDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+
+    function onLayoutItemDrop(e, targetGroupId) {
+      e.preventDefault();
+      const colId = e.dataTransfer.getData('text/plain');
+      const targetLayoutIdx = parseInt(e.currentTarget.getAttribute('data-layout-index'));
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+
+      if (targetGroupId && colId) {
+        moveColumnToGroup(colId, targetGroupId);
+      } else if (!isNaN(targetLayoutIdx) && dragLayoutIndex !== null && dragLayoutIndex !== targetLayoutIdx) {
+        const item = sec.layoutItems[dragLayoutIndex];
+        sec.layoutItems.splice(dragLayoutIndex, 1);
+        sec.layoutItems.splice(targetLayoutIdx, 0, item);
+        updateColumnsOrderFromLayout(sec);
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function onLayoutItemDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      dragLayoutIndex = null;
     }
 
     function onColumnDragOver(e) {
@@ -1945,17 +2065,22 @@
           maxRecords: sec.maxRecords !== undefined ? sec.maxRecords : 0,
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
-          columnGroups: (sec.columnGroups || []).map(g => ({
-            id: g.id,
-            title: g.title,
-            cols: (g.cols || []).map(c => ({ colId: c.colId, width: parseFloat(c.width) || 25 }))
-          })),
+          layoutItems: (sec.layoutItems || []).map(item => {
+            if (item.type === 'group') {
+              return {
+                type: 'group',
+                id: item.id,
+                title: item.title,
+                cols: (item.cols || []).map(c => ({ colId: c.colId, width: parseFloat(c.width) || 25 }))
+              };
+            }
+            return { type: 'column', colId: item.colId };
+          }),
           columns: sec.columns.map(c => ({
             colId: c.colId,
             label: c.label,
             useLabel: c.useLabel !== false,
-            enabled: c.enabled === true,
-            groupId: c.groupId || null
+            enabled: c.enabled !== false
           })),
           children: buildConfigJson(sec.children)
         }));
@@ -2041,18 +2166,13 @@
         const childrenHtml = sec.children.map(child => renderSectionRecordsHTML(child, row)).join('');
         const pageBreakClass = (sec.pageBreak === 'always' && rIdx > 0) ? ' page-break-before-record' : '';
 
-        const processedGroups = new Set();
+        syncLayoutItems(sec);
+
         const innerContentBlocks = [];
 
-        activeCols.forEach(c => {
-          if (c.groupId) {
-            if (processedGroups.has(c.groupId)) return;
-            processedGroups.add(c.groupId);
-
-            const grp = (sec.columnGroups || []).find(g => g.id === c.groupId);
-            if (!grp || !grp.cols || grp.cols.length === 0) return;
-
-            const validCols = grp.cols.filter(slot => {
+        (sec.layoutItems || []).forEach(item => {
+          if (item.type === 'group') {
+            const validCols = (item.cols || []).filter(slot => {
               if (!slot.colId) return false;
               const colMeta = sec.columns.find(col => col.colId === slot.colId);
               return colMeta && colMeta.enabled !== false;
@@ -2097,7 +2217,10 @@
                 ${groupFieldsHtml}
               </div>
             `);
-          } else {
+          } else if (item.type === 'column') {
+            const c = sec.columns.find(col => col.colId === item.colId);
+            if (!c || c.enabled === false) return;
+
             let cellVal = row[c.colId];
             const helperColId = 'gristHelper_Display_' + c.colId;
             if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
@@ -2234,12 +2357,15 @@
     window.exportPDF = exportPDF;
     window.exportExcel = exportExcel;
 
+    window.moveLayoutItem = moveLayoutItem;
     window.createColumnGroup = createColumnGroup;
     window.removeColumnGroup = removeColumnGroup;
     window.moveColumnToGroup = moveColumnToGroup;
     window.onGroupColWidthChange = onGroupColWidthChange;
-    window.onGroupDragOver = onGroupDragOver;
-    window.onGroupDrop = onGroupDrop;
+    window.onLayoutItemDragStart = onLayoutItemDragStart;
+    window.onLayoutItemDragOver = onLayoutItemDragOver;
+    window.onLayoutItemDrop = onLayoutItemDrop;
+    window.onLayoutItemDragEnd = onLayoutItemDragEnd;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
