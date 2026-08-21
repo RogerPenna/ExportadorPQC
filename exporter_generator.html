@@ -863,9 +863,25 @@
     function getRecordDisplayText(row, colMeta = null, targetTable = '') {
       if (!row || typeof row !== 'object') return String(row || '');
 
-      // 0. Check if user manually selected a specific refTargetCol
+      // 0. Check if user manually selected a specific refTargetCol and refTargetTable
       if (colMeta && colMeta.refTargetCol) {
         const target = String(colMeta.refTargetCol).toLowerCase();
+        
+        if (colMeta.refTargetTable && tableRecordsCache[colMeta.refTargetTable]) {
+          const targetRecords = tableRecordsCache[colMeta.refTargetTable];
+          const refId = row.Num || row.id || row[colMeta.colId];
+          const foundTargetRow = targetRecords.find(r => String(r.id) === String(refId) || String(r.id) === String(row.id));
+          if (foundTargetRow) {
+            for (const [k, v] of Object.entries(foundTargetRow)) {
+              if (k.toLowerCase() === target) {
+                if (v !== undefined && v !== null && String(v).trim() !== '') {
+                  return String(v);
+                }
+              }
+            }
+          }
+        }
+
         for (const [k, v] of Object.entries(row)) {
           if (k.toLowerCase() === target) {
             if (v !== undefined && v !== null && String(v).trim() !== '') {
@@ -920,7 +936,7 @@
       }
 
       // 4. Preferred keys fallback
-      const preferredKeys = ['label', 'Pratica', 'Nome', 'Nome_da_Empresa', 'Name', 'Title', 'Indicador', 'Avaliador', 'Descricao', 'PraticaRef_Nome2'];
+      const preferredKeys = ['label', 'Pratica', 'Nome', 'Nome_da_Empresa', 'Name', 'Title', 'Avaliador', 'Descricao', 'PraticaRef_Nome2'];
       for (const k of preferredKeys) {
         if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
           return String(row[k]);
@@ -1163,7 +1179,8 @@
             useLabel: c.useLabel !== false,
             enabled: c.enabled === true,
             customLabel: c.customLabel || null,
-            refTargetCol: c.refTargetCol || null
+            refTargetCol: c.refTargetCol || null,
+            refTargetTable: c.refTargetTable || null
           })),
           children: buildConfigJson(sec.children)
         }));
@@ -1398,6 +1415,7 @@
                   enabled: saved.enabled,
                   customLabel: saved.customLabel || null,
                   refTargetCol: saved.refTargetCol || null,
+                  refTargetTable: saved.refTargetTable || null,
                   groupId: saved.groupId || null,
                   widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
                 });
@@ -1414,6 +1432,7 @@
                 enabled: true,
                 customLabel: null,
                 refTargetCol: null,
+                refTargetTable: null,
                 groupId: null,
                 widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
               });
@@ -2496,10 +2515,10 @@
               const colMeta = sec.columns.find(col => col.colId === slot.colId);
               let cellVal = row[colMeta.colId];
               const helperColId = 'gristHelper_Display_' + colMeta.colId;
-              if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
-                cellVal = row[helperColId];
-              } else if (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:'))) {
+              if (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:'))) {
                 cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMeta);
+              } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
+                cellVal = row[helperColId];
               }
               const val = formatCellValue(cellVal, colMeta.type);
               const align = colMeta.widgetOptions?.alignment || 'left';
@@ -2536,10 +2555,10 @@
 
             let cellVal = row[c.colId];
             const helperColId = 'gristHelper_Display_' + c.colId;
-            if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
-              cellVal = row[helperColId];
-            } else if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
+            if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
               cellVal = resolveRefDisplayValue(cellVal, c.type, c);
+            } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
+              cellVal = row[helperColId];
             }
             const val = formatCellValue(cellVal, c.type);
             const align = c.widgetOptions?.alignment || 'left';
@@ -2781,16 +2800,14 @@
             <span>👁️</span> <span>${col.enabled !== false ? 'Ocultar no Relatório' : 'Exibir no Relatório'}</span>
           </div>
 
-          ${(col.type && (col.type.startsWith('Ref:') || col.type.startsWith('RefList:'))) ? `
-            <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
-            <div onclick="promptRefTargetCol('${colId}')" class="ctx-btn" style="color: #60a5fa;">
-              <span>🔗</span> <span>${col.refTargetCol ? 'Alterar Coluna Referenciada' : 'Escolher Coluna da Referência'}</span>
+          <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
+          <div onclick="promptRefTargetCol('${colId}')" class="ctx-btn" style="color: #60a5fa;">
+            <span>🔗</span> <span>${col.refTargetCol ? 'Alterar Coluna Referenciada' : 'Escolher Coluna da Referência'}</span>
+          </div>
+          ${col.refTargetCol ? `
+            <div onclick="clearRefTargetCol('${colId}')" class="ctx-btn" style="color: #f87171;">
+              <span>🗑️</span> <span>Restaurar Referência Padrão</span>
             </div>
-            ${col.refTargetCol ? `
-              <div onclick="clearRefTargetCol('${colId}')" class="ctx-btn" style="color: #f87171;">
-                <span>🗑️</span> <span>Restaurar Referência Padrão</span>
-              </div>
-            ` : ''}
           ` : ''}
 
           <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
@@ -2921,15 +2938,22 @@
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
       const col = (sec.columns || []).find(c => c.colId === colId);
-      if (!col || !col.type) return;
+      if (!col) return;
 
       let targetTable = '';
-      if (col.type.startsWith('Ref:')) targetTable = col.type.substring(4).trim();
-      else if (col.type.startsWith('RefList:')) targetTable = col.type.substring(8).trim();
+      if (col.type && col.type.startsWith('Ref:')) {
+        targetTable = col.type.substring(4).trim();
+      } else if (col.type && col.type.startsWith('RefList:')) {
+        targetTable = col.type.substring(8).trim();
+      } else {
+        const refCol = (sec.columns || []).find(c => c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:')));
+        if (refCol && refCol.type) {
+          targetTable = refCol.type.startsWith('Ref:') ? refCol.type.substring(4).trim() : refCol.type.substring(8).trim();
+        }
+      }
 
       if (!targetTable) {
-        alert('Tabela referenciada não identificada.');
-        return;
+        targetTable = sec.tableId;
       }
 
       const schema = await getTableSchemaCached(targetTable);
@@ -2940,7 +2964,7 @@
         return;
       }
 
-      const promptMsg = `Escolha qual coluna da tabela '${targetTable}' você deseja exibir:\n\n` +
+      const promptMsg = `Escolha qual coluna da tabela '${targetTable}' você deseja exibir para '${col.label || colId}':\n\n` +
         availableCols.map((c, i) => `${i + 1}. ${c}`).join('\n') +
         `\n\nDigite o NOME da coluna (ou o número de 1 a ${availableCols.length}):`;
 
@@ -2961,9 +2985,11 @@
 
         if (selectedCol) {
           col.refTargetCol = selectedCol;
+          col.refTargetTable = targetTable;
           logDebug(`Coluna de referência definida manualmente: ${colId} -> ${targetTable}.${selectedCol}`);
         } else if (trimmed === '') {
           delete col.refTargetCol;
+          delete col.refTargetTable;
         } else {
           alert(`Coluna '${trimmed}' não encontrada na tabela '${targetTable}'.`);
         }
@@ -2980,6 +3006,7 @@
       const col = (sec.columns || []).find(c => c.colId === colId);
       if (col) {
         delete col.refTargetCol;
+        delete col.refTargetTable;
         openContextMenuColId = null;
         renderDrawerColumns();
         updatePreview();
