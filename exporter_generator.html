@@ -997,6 +997,17 @@
           maxRecords: sec.maxRecords !== undefined ? sec.maxRecords : 0,
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
+          layoutItems: (sec.layoutItems || []).map(item => {
+            if (item.type === 'group') {
+              return {
+                type: 'group',
+                id: item.id,
+                title: item.title,
+                cols: (item.cols || []).map(c => ({ colId: c.colId, width: parseFloat(c.width) || 25 }))
+              };
+            }
+            return { type: 'column', colId: item.colId };
+          }),
           columns: sec.columns.map(c => ({
             colId: c.colId,
             label: c.label,
@@ -1012,6 +1023,10 @@
         subtitle: subtitle,
         themeColor: themeColor,
         fontSize: fontSize,
+        pageMargin: pageMargin,
+        subIndent: subIndent,
+        fieldPadding: fieldPadding,
+        cardPadding: cardPadding,
         hierarchy: buildConfigJson(reportSections)
       };
 
@@ -1416,6 +1431,8 @@
         ];
       }
 
+      syncLayoutItems(section);
+
       // Pre-fetch referenced tables so references resolve automatically
       for (const col of section.columns) {
         if (col.type && (col.type.startsWith('Ref:') || col.type.startsWith('RefList:'))) {
@@ -1541,6 +1558,7 @@
     function closeColumnsDrawer() {
       document.getElementById('columns-drawer').classList.remove('open');
       activeDrawerSectionId = null;
+      saveConfigToGrist();
     }
 
     function syncLayoutItems(sec) {
@@ -1712,6 +1730,7 @@
       sec.layoutItems.unshift(newGrp); // Add to TOP
       renderDrawerColumns();
       updatePreview();
+      saveConfigToGrist();
     }
 
     function moveLayoutItem(index, direction) {
@@ -1731,6 +1750,7 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
+      saveConfigToGrist();
     }
 
     function updateColumnsOrderFromLayout(sec) {
@@ -1774,6 +1794,7 @@
 
       renderDrawerColumns();
       updatePreview();
+      saveConfigToGrist();
     }
 
     function moveColumnToGroup(colId, targetGroupId) {
@@ -1817,6 +1838,7 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
+      saveConfigToGrist();
     }
 
     function onGroupColWidthChange(groupId, colId, width) {
@@ -1830,6 +1852,7 @@
         slot.width = isNaN(w) || w <= 0 ? 25 : w;
         renderDrawerColumns();
         updatePreview();
+        saveConfigToGrist();
       }
     }
 
@@ -1863,6 +1886,7 @@
         updateColumnsOrderFromLayout(sec);
         renderDrawerColumns();
         updatePreview();
+        saveConfigToGrist();
       }
     }
 
@@ -2420,6 +2444,7 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
+      saveConfigToGrist();
     }
 
     // Expose functions globally for HTML event handlers in ES Module scope
