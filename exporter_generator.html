@@ -1038,7 +1038,11 @@
                 type: 'group',
                 id: item.id,
                 title: item.title,
-                cols: (item.cols || []).map(c => ({ colId: c.colId, width: parseFloat(c.width) || 25 }))
+                cols: (item.cols || []).map(c => ({
+                  colId: c.colId,
+                  width: parseFloat(c.width) || 25,
+                  locked: c.locked === true
+                }))
               };
             }
             return { type: 'column', colId: item.colId };
@@ -1676,7 +1680,10 @@
                       <span style="color: var(--text-muted); font-size:0.8rem;">☰</span>
                       <span style="flex:1; font-size:0.75rem; color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${label} <span style="color:#64748b; font-weight:normal;">(${slot.colId})</span></span>
                       <div style="display:flex; align-items:center; gap:2px;">
-                        <input type="number" min="5" max="100" value="${slot.width || 25}" style="width: 44px; padding: 2px 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px; text-align: center;" onchange="onGroupColWidthChange('${item.id}', '${slot.colId}', this.value)">
+                        <button class="preview-btn" style="padding: 2px 4px; font-size: 0.7rem; background: ${slot.locked ? '#1e3a8a' : '#0f172a'}; border-color: ${slot.locked ? '#3b82f6' : '#334155'}; color: ${slot.locked ? '#60a5fa' : '#94a3b8'};" onclick="toggleColLockInGroup('${item.id}', '${slot.colId}')" title="${slot.locked ? 'Bloqueada (🔒 clique para desbloquear)' : 'Desbloqueada (🔓 clique para travar %)'}">
+                          ${slot.locked ? '🔒' : '🔓'}
+                        </button>
+                        <input type="number" min="1" max="99" value="${slot.width || 25}" style="width: 44px; padding: 2px 4px; font-size: 0.72rem; background: #0f172a; color: #fff; border: 1px solid ${slot.locked ? '#3b82f6' : '#334155'}; border-radius: 4px; text-align: center;" onchange="onGroupColWidthChange('${item.id}', '${slot.colId}', this.value)">
                         <span style="font-size: 0.72rem; color: #94a3b8;">%</span>
                       </div>
                       <button class="preview-btn" style="padding: 2px 5px;" onclick="moveColInsideGroup('${item.id}', ${sIdx}, 'up')" title="Mover para Cima/Esquerda">▲</button>
@@ -1830,6 +1837,40 @@
       updatePreview();
     }
 
+    function recalculateGroupWidths(grp, changedColId = null, userTypedValue = null) {
+      if (!grp || !grp.cols || grp.cols.length === 0) return;
+
+      if (changedColId !== null && userTypedValue !== null) {
+        const changedSlot = grp.cols.find(s => s.colId === changedColId);
+        if (changedSlot) {
+          let val = parseFloat(userTypedValue);
+          if (isNaN(val)) val = 25;
+          changedSlot.width = Math.min(99, Math.max(1, val));
+        }
+      }
+
+      // Collect fixed (locked OR user-edited) slots
+      const fixedCols = new Set();
+      let sumFixed = 0;
+
+      grp.cols.forEach(slot => {
+        if (slot.locked || slot.colId === changedColId) {
+          fixedCols.add(slot.colId);
+          sumFixed += parseFloat(slot.width) || 0;
+        }
+      });
+
+      const freeCols = grp.cols.filter(slot => !fixedCols.has(slot.colId));
+
+      if (freeCols.length > 0) {
+        const remaining = Math.max(0, 100 - sumFixed);
+        const share = Math.round((remaining / freeCols.length) * 10) / 10;
+        freeCols.forEach(slot => {
+          slot.width = share;
+        });
+      }
+    }
+
     function moveColumnToGroup(colId, targetGroupId) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
@@ -1842,6 +1883,7 @@
           if (slotIdx !== -1) {
             sourceGroup = item;
             item.cols.splice(slotIdx, 1);
+            recalculateGroupWidths(sourceGroup);
           }
         }
       });
@@ -1855,9 +1897,8 @@
         const targetGrp = sec.layoutItems.find(i => i.type === 'group' && i.id === targetGroupId);
         if (targetGrp) {
           if (!targetGrp.cols) targetGrp.cols = [];
-          const numCols = targetGrp.cols.length + 1;
-          const defaultWidth = numCols === 4 ? 25 : (numCols === 3 ? 33.3 : (numCols === 2 ? 50 : 100));
-          targetGrp.cols.push({ colId: colId, width: defaultWidth });
+          targetGrp.cols.push({ colId: colId, width: 0, locked: false });
+          recalculateGroupWidths(targetGrp);
         }
       } else {
         let insertIdx = sec.layoutItems.length;
@@ -1878,10 +1919,21 @@
       if (!sec || !sec.layoutItems) return;
       const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
       if (!grp || !grp.cols) return;
+      
+      recalculateGroupWidths(grp, colId, width);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function toggleColLockInGroup(groupId, colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (!grp || !grp.cols) return;
+
       const slot = grp.cols.find(s => s.colId === colId);
       if (slot) {
-        const w = parseFloat(width);
-        slot.width = isNaN(w) || w <= 0 ? 25 : w;
+        slot.locked = !slot.locked;
         renderDrawerColumns();
         updatePreview();
       }
@@ -2183,7 +2235,11 @@
                 type: 'group',
                 id: item.id,
                 title: item.title,
-                cols: (item.cols || []).map(c => ({ colId: c.colId, width: parseFloat(c.width) || 25 }))
+                cols: (item.cols || []).map(c => ({
+                  colId: c.colId,
+                  width: parseFloat(c.width) || 25,
+                  locked: c.locked === true
+                }))
               };
             }
             return { type: 'column', colId: item.colId };
@@ -2502,6 +2558,7 @@
     }
 
     // Expose functions globally for HTML event handlers in ES Module scope
+    window.toggleColLockInGroup = toggleColLockInGroup;
     window.onReportFieldClick = onReportFieldClick;
     window.addRootSection = addRootSection;
     window.addChildSection = addChildSection;
