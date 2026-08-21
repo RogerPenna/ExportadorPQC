@@ -2185,6 +2185,14 @@
       dragLayoutIndex = null;
     }
 
+    let dragSrcIndex = null;
+
+    function onColumnDragStart(e) {
+      dragSrcIndex = parseInt(e.currentTarget.getAttribute('data-index'));
+      e.currentTarget.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    }
+
     function onColumnDragOver(e) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
