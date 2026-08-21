@@ -845,6 +845,7 @@
     let currentConfigRecord = null;
     let isSaving = false;
 
+    const tableRecordsCache = {};
     const tableSchemaCache = {};
 
     async function getTableSchemaCached(tableId) {
