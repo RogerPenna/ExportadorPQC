@@ -959,7 +959,9 @@
       if (cellVal === undefined || cellVal === null || cellVal === '') return '';
       
       let targetTable = '';
-      if (typeof colType === 'string') {
+      if (colMeta && colMeta.refTargetTable) {
+        targetTable = colMeta.refTargetTable;
+      } else if (typeof colType === 'string') {
         if (colType.startsWith('Ref:')) {
           targetTable = colType.substring(4).trim();
         } else if (colType.startsWith('RefList:')) {
@@ -977,7 +979,11 @@
       const targetRecords = tableRecordsCache[targetTable];
 
       const lookupId = (id) => {
-        const foundRow = targetRecords.find(r => String(r.id) === String(id));
+        let foundRow = targetRecords.find(r => String(r.id) === String(id));
+        if (!foundRow && colMeta && colMeta._currentRow) {
+          const parentRefId = colMeta._currentRow.Num || colMeta._currentRow.id;
+          foundRow = targetRecords.find(r => String(r.id) === String(parentRefId) || String(r.Num) === String(parentRefId));
+        }
         if (foundRow) return getRecordDisplayText(foundRow, colMeta, targetTable);
         return String(id);
       };
@@ -2533,12 +2539,13 @@
               const colMeta = sec.columns.find(col => col.colId === slot.colId);
               let cellVal = row[colMeta.colId];
               const helperColId = 'gristHelper_Display_' + colMeta.colId;
-              if (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:'))) {
-                cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMeta);
+              const colMetaWithRow = colMeta ? { ...colMeta, _currentRow: row } : null;
+              if (colMeta.refTargetCol || (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:')))) {
+                cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMetaWithRow);
               } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
                 cellVal = row[helperColId];
               }
-              const val = formatCellValue(cellVal, colMeta.type, colMeta);
+              const val = formatCellValue(cellVal, colMeta.type, colMetaWithRow);
               const align = colMeta.widgetOptions?.alignment || 'left';
               const cellBg = colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor}` : '';
               const cellColor = colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor}` : '';
@@ -2573,12 +2580,13 @@
 
             let cellVal = row[c.colId];
             const helperColId = 'gristHelper_Display_' + c.colId;
-            if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
-              cellVal = resolveRefDisplayValue(cellVal, c.type, c);
+            const cWithRow = c ? { ...c, _currentRow: row } : null;
+            if (c.refTargetCol || (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:')))) {
+              cellVal = resolveRefDisplayValue(cellVal, c.type, cWithRow);
             } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
               cellVal = row[helperColId];
             }
-            const val = formatCellValue(cellVal, c.type, c);
+            const val = formatCellValue(cellVal, c.type, cWithRow);
             const align = c.widgetOptions?.alignment || 'left';
             const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
             const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
