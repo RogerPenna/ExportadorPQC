@@ -279,8 +279,8 @@
     .pdf-record-card {
       border: 1px solid #cbd5e1;
       border-radius: 6px;
-      padding: 8px 10px;
-      margin-bottom: 8px;
+      padding: var(--card-padding, 4px 6px);
+      margin-bottom: 6px;
       background-color: #ffffff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
       page-break-inside: avoid;
@@ -411,9 +411,9 @@
     .preview-section-container {
       border: 1px dashed rgba(59, 130, 246, 0.35);
       border-radius: 8px;
-      padding: 6px 8px;
-      margin-top: 8px;
-      margin-bottom: 8px;
+      padding: var(--card-padding, 4px 6px);
+      margin-top: 6px;
+      margin-bottom: 6px;
       position: relative;
       background-color: rgba(248, 250, 252, 0.45);
       transition: all 0.2s ease;
@@ -468,9 +468,9 @@
     .preview-field-container {
       position: relative;
       border: 1px dashed rgba(148, 163, 184, 0.3);
-      border-radius: 6px;
-      padding: 6px 10px;
-      margin-bottom: 4px;
+      border-radius: 4px;
+      padding: var(--field-padding, 2px 4px);
+      margin-bottom: 3px;
       transition: all 0.2s ease;
       background-color: #ffffff;
     }
@@ -579,19 +579,39 @@
         <div class="form-group" style="flex: 1;">
           <label for="page-margin-select">Margem da Página</label>
           <select id="page-margin-select" onchange="updatePreview()">
-            <option value="5mm">Estreita (5mm)</option>
-            <option value="10mm" selected>Média (10mm)</option>
+            <option value="4mm">Mínima (4mm)</option>
+            <option value="5mm" selected>Estreita (5mm)</option>
+            <option value="10mm">Média (10mm)</option>
             <option value="15mm">Padrão (15mm)</option>
-            <option value="20mm">Larga (20mm)</option>
           </select>
         </div>
         <div class="form-group" style="flex: 1;">
           <label for="subsection-indent-select">Recuo de Sub-seção</label>
           <select id="subsection-indent-select" onchange="updatePreview()">
-            <option value="0px">Sem Recuo (0px)</option>
-            <option value="6px" selected>Leve (6px)</option>
-            <option value="12px">Padrão (12px)</option>
-            <option value="18px">Largo (18px)</option>
+            <option value="0px" selected>Sem Recuo (0px - Alinhado)</option>
+            <option value="4px">Sutil (4px)</option>
+            <option value="8px">Médio (8px)</option>
+            <option value="14px">Largo (14px)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group flex-row" style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+          <label for="field-padding-select">Padding dos Campos</label>
+          <select id="field-padding-select" onchange="updatePreview()">
+            <option value="0px 2px">Sem Padding (0px)</option>
+            <option value="2px 4px" selected>Mínimo (2px 4px)</option>
+            <option value="4px 6px">Médio (4px 6px)</option>
+            <option value="8px 10px">Padrão (8px 10px)</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label for="card-padding-select">Padding dos Cards</label>
+          <select id="card-padding-select" onchange="updatePreview()">
+            <option value="2px 4px">Mínimo (2px 4px)</option>
+            <option value="4px 6px" selected>Compacto (4px 6px)</option>
+            <option value="8px 10px">Padrão (8px 10px)</option>
           </select>
         </div>
       </div>
@@ -877,8 +897,10 @@
               document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
               document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
               document.getElementById('font-size-select').value = config.fontSize || '9pt';
-              document.getElementById('page-margin-select').value = config.pageMargin || '10mm';
-              document.getElementById('subsection-indent-select').value = config.subIndent || '6px';
+              document.getElementById('page-margin-select').value = config.pageMargin || '5mm';
+              document.getElementById('subsection-indent-select').value = config.subIndent !== undefined ? config.subIndent : '0px';
+              if (config.fieldPadding) document.getElementById('field-padding-select').value = config.fieldPadding;
+              if (config.cardPadding) document.getElementById('card-padding-select').value = config.cardPadding;
               
               reportSections = config.hierarchy;
               sanitizeSections(reportSections);
@@ -963,6 +985,8 @@
       const fontSize = document.getElementById('font-size-select').value;
       const pageMargin = document.getElementById('page-margin-select').value;
       const subIndent = document.getElementById('subsection-indent-select').value;
+      const fieldPadding = document.getElementById('field-padding-select').value;
+      const cardPadding = document.getElementById('card-padding-select').value;
 
       const buildConfigJson = (sections) => {
         return sections.map(sec => ({
@@ -2065,6 +2089,8 @@
       const fontSize = document.getElementById('font-size-select').value;
       const pageMargin = document.getElementById('page-margin-select').value;
       const subIndent = document.getElementById('subsection-indent-select').value;
+      const fieldPadding = document.getElementById('field-padding-select').value;
+      const cardPadding = document.getElementById('card-padding-select').value;
 
       document.getElementById('pdf-title').innerText = title;
       document.getElementById('pdf-subtitle').innerText = subtitle;
@@ -2074,6 +2100,8 @@
       sheet.style.setProperty('--pdf-font-size', fontSize);
       sheet.style.setProperty('--pdf-page-margin', pageMargin);
       sheet.style.setProperty('--pdf-sub-indent', subIndent);
+      sheet.style.setProperty('--field-padding', fieldPadding);
+      sheet.style.setProperty('--card-padding', cardPadding);
 
       // Render hierarchical preview content
       const pdfContent = document.getElementById('pdf-sections-content');
