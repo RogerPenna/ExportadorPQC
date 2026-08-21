@@ -1876,11 +1876,11 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 3px;">
                   <!-- Icon Ativa -->
-                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.enabled !== false ? 'background: rgba(34, 197, 94, 0.2); color: #4ade80; border-color: #22c55e;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnEnabled(${colIdx})" title="${col.enabled !== false ? 'Coluna Visível no Relatório (clique para ocultar)' : 'Coluna Oculta (clique para exibir)'}">
+                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.enabled !== false ? 'background: rgba(34, 197, 94, 0.2); color: #4ade80; border-color: #22c55e;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnEnabled('${col.colId}')" title="${col.enabled !== false ? 'Coluna Visível no Relatório (clique para ocultar)' : 'Coluna Oculta (clique para exibir)'}">
                     👁️
                   </button>
                   <!-- Icon Usar Rótulo -->
-                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.useLabel !== false ? 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnLabelMode(${colIdx})" title="${col.useLabel !== false ? 'Exibindo Rótulo (clique para usar ID puro)' : 'Exibindo ID Puro (clique para usar Rótulo)'}">
+                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.useLabel !== false ? 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnLabelMode('${col.colId}')" title="${col.useLabel !== false ? 'Exibindo Rótulo (clique para usar ID puro)' : 'Exibindo ID Puro (clique para usar Rótulo)'}">
                     🏷️
                   </button>
                   <!-- Up/Down arrows -->
@@ -2157,22 +2157,36 @@
       dragSrcIndex = null;
     }
 
-    function toggleDrawerColumnEnabled(idx) {
-      logDebug(`toggleDrawerColumnEnabled index: ${idx} para seção ativa: ${activeDrawerSectionId}`);
+    function toggleDrawerColumnEnabled(colIdOrIdx) {
+      logDebug(`toggleDrawerColumnEnabled: ${colIdOrIdx} para seção ativa: ${activeDrawerSectionId}`);
       const sec = findSectionById(reportSections, activeDrawerSectionId);
-      if (sec && sec.columns[idx]) {
-        const col = sec.columns[idx];
+      if (!sec) return;
+      let col = null;
+      if (typeof colIdOrIdx === 'string') {
+        col = sec.columns.find(c => c.colId === colIdOrIdx);
+      } else {
+        col = sec.columns[colIdOrIdx];
+      }
+      if (col) {
         col.enabled = !col.enabled;
         logDebug(`Campo da gaveta '${col.colId}' habilitado setado para: ${col.enabled}`);
-        renderSectionsManager();
+        renderDrawerColumns();
         updatePreview();
       }
     }
 
-    function toggleDrawerColumnLabelMode(idx) {
+    function toggleDrawerColumnLabelMode(colIdOrIdx) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
-      if (sec && sec.columns[idx]) {
-        sec.columns[idx].useLabel = sec.columns[idx].useLabel === false ? true : false;
+      if (!sec) return;
+      let col = null;
+      if (typeof colIdOrIdx === 'string') {
+        col = sec.columns.find(c => c.colId === colIdOrIdx);
+      } else {
+        col = sec.columns[colIdOrIdx];
+      }
+      if (col) {
+        col.useLabel = col.useLabel === false ? true : false;
+        renderDrawerColumns();
         updatePreview();
       }
     }
@@ -2425,11 +2439,15 @@
       document.getElementById('json-config').value = JSON.stringify(configJson, null, 2);
     }
 
-    function formatCellValue(val, type) {
+    function formatCellValue(val, type, colMeta = null) {
       if (val === undefined || val === null) return '';
 
+      if (colMeta && colMeta.refTargetCol) {
+        return resolveRefDisplayValue(val, type, colMeta);
+      }
+
       if (type && (type.startsWith('Ref:') || type.startsWith('RefList:'))) {
-        return resolveRefDisplayValue(val, type);
+        return resolveRefDisplayValue(val, type, colMeta);
       }
       
       // Handle Boolean (Bool)
@@ -2520,7 +2538,7 @@
               } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
                 cellVal = row[helperColId];
               }
-              const val = formatCellValue(cellVal, colMeta.type);
+              const val = formatCellValue(cellVal, colMeta.type, colMeta);
               const align = colMeta.widgetOptions?.alignment || 'left';
               const cellBg = colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor}` : '';
               const cellColor = colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor}` : '';
@@ -2560,7 +2578,7 @@
             } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
               cellVal = row[helperColId];
             }
-            const val = formatCellValue(cellVal, c.type);
+            const val = formatCellValue(cellVal, c.type, c);
             const align = c.widgetOptions?.alignment || 'left';
             const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
             const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
