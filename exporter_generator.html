@@ -62,6 +62,11 @@
       display: flex;
       justify-content: center;
       align-items: flex-start;
+      transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body.drawer-open .right-panel {
+      margin-right: 480px;
     }
 
     /* Form & Controls */
@@ -473,6 +478,31 @@
       margin-bottom: 3px;
       transition: all 0.2s ease;
       background-color: #ffffff;
+      cursor: pointer;
+    }
+    .preview-field-container:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    @keyframes drawerCardHighlight {
+      0% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.9);
+        border-color: #3b82f6 !important;
+        transform: scale(1.02);
+      }
+      50% {
+        box-shadow: 0 0 16px 4px rgba(59, 130, 246, 0.7);
+        border-color: #60a5fa !important;
+        transform: scale(1.02);
+      }
+      100% {
+        box-shadow: none;
+        transform: scale(1);
+      }
+    }
+    .drawer-card-highlight {
+      animation: drawerCardHighlight 1.8s ease-out !important;
     }
     .preview-field-container:hover {
       border-color: rgba(59, 130, 246, 0.6);
@@ -1558,10 +1588,12 @@
       document.getElementById('drawer-title').innerText = `Configurar Colunas: ${sec.title}`;
       renderDrawerColumns();
       document.getElementById('columns-drawer').classList.add('open');
+      document.body.classList.add('drawer-open');
     }
 
     function closeColumnsDrawer() {
       document.getElementById('columns-drawer').classList.remove('open');
+      document.body.classList.remove('drawer-open');
       activeDrawerSectionId = null;
     }
 
@@ -1640,7 +1672,7 @@
                   const col = sec.columns.find(c => c.colId === slot.colId);
                   const label = col ? col.label : slot.colId;
                   return `
-                    <div style="display: flex; gap: 4px; align-items: center; background: rgba(30, 41, 59, 0.9); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);" onmousedown="event.stopPropagation()">
+                    <div data-slot-colid="${slot.colId}" style="display: flex; gap: 4px; align-items: center; background: rgba(30, 41, 59, 0.9); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);" onmousedown="event.stopPropagation()">
                       <span style="color: var(--text-muted); font-size:0.8rem;">☰</span>
                       <span style="flex:1; font-size:0.75rem; color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${label} <span style="color:#64748b; font-weight:normal;">(${slot.colId})</span></span>
                       <div style="display:flex; align-items:center; gap:2px;">
@@ -2280,7 +2312,7 @@
               const colName = colMeta.useLabel !== false ? colMeta.label : colMeta.colId;
 
               return `
-                <div class="preview-field-container" style="text-align: ${align};">
+                <div class="preview-field-container" style="text-align: ${align};" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
@@ -2317,7 +2349,7 @@
             const colName = c.useLabel !== false ? c.label : c.colId;
 
             innerContentBlocks.push(`
-              <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px;">
+              <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                 <div class="preview-field-controls">
                   <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                   <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
@@ -2444,7 +2476,33 @@
       updatePreview();
     }
 
+    function onReportFieldClick(event, secId, colId) {
+      if (event.target.closest('.preview-field-controls')) return;
+      event.stopPropagation();
+
+      openColumnsDrawer(secId);
+
+      setTimeout(() => {
+        const container = document.getElementById('drawer-columns-list');
+        if (!container) return;
+
+        let targetEl = container.querySelector(`[data-colid="${colId}"]`);
+        if (!targetEl) {
+          targetEl = container.querySelector(`[data-slot-colid="${colId}"]`);
+        }
+
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetEl.classList.remove('drawer-card-highlight');
+          void targetEl.offsetWidth;
+          targetEl.classList.add('drawer-card-highlight');
+          setTimeout(() => targetEl.classList.remove('drawer-card-highlight'), 1800);
+        }
+      }, 120);
+    }
+
     // Expose functions globally for HTML event handlers in ES Module scope
+    window.onReportFieldClick = onReportFieldClick;
     window.addRootSection = addRootSection;
     window.addChildSection = addChildSection;
     window.removeSection = removeSection;
