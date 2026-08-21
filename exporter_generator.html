@@ -963,7 +963,10 @@
       if (!refTargetCol || !refTargetTable) return '';
 
       const targetRecords = tableRecordsCache[refTargetTable];
-      if (!targetRecords) return String(row[colMeta.colId] ?? '');
+      if (!targetRecords) {
+        logDebug(`resolveByRefTarget: tabela '${refTargetTable}' NÃO encontrada no cache. Chaves disponíveis: ${Object.keys(tableRecordsCache).join(', ')}`);
+        return String(row[colMeta.colId] ?? '');
+      }
 
       // Find the Ref column in this section that points to refTargetTable
       const refCol = (sec.columns || []).find(c =>
@@ -973,10 +976,13 @@
         )
       );
 
+      logDebug(`resolveByRefTarget: coluna='${colMeta.colId}' targetTable='${refTargetTable}' targetCol='${refTargetCol}' refCol='${refCol ? refCol.colId : 'NÃO ENCONTRADO'}'`);
+
       let refId = null;
       if (refCol && row[refCol.colId] !== undefined && row[refCol.colId] !== null) {
         const rawRef = row[refCol.colId];
         refId = typeof rawRef === 'object' ? (rawRef.id ?? rawRef) : rawRef;
+        logDebug(`resolveByRefTarget: refId via refCol='${refId}'`);
       }
 
       // Fallback: try to use the cell value itself as the ID
@@ -984,20 +990,26 @@
         const rawCell = row[colMeta.colId];
         if (rawCell !== undefined && rawCell !== null) {
           refId = typeof rawCell === 'object' ? (rawCell.id ?? rawCell) : rawCell;
+          logDebug(`resolveByRefTarget: refId via fallback cellVal='${refId}'`);
         }
       }
 
       if (refId === null || refId === undefined || refId === '') return '';
 
       const targetRow = targetRecords.find(r => String(r.id) === String(refId));
-      if (!targetRow) return String(refId);
+      if (!targetRow) {
+        logDebug(`resolveByRefTarget: registro ID='${refId}' NÃO encontrado em '${refTargetTable}'. IDs disponíveis: ${targetRecords.slice(0,5).map(r=>r.id).join(',')}`);
+        return String(refId);
+      }
 
       const target = refTargetCol.toLowerCase();
       for (const [k, v] of Object.entries(targetRow)) {
         if (k.toLowerCase() === target && v !== undefined && v !== null) {
+          logDebug(`resolveByRefTarget: SUCESSO - ${colMeta.colId} -> ${refTargetTable}[${refId}].${k} = '${v}'`);
           return String(v);
         }
       }
+      logDebug(`resolveByRefTarget: coluna '${refTargetCol}' NÃO encontrada no registro. Chaves: ${Object.keys(targetRow).join(', ')}`);
       return '';
     }
 
@@ -1617,6 +1629,8 @@
               type: gristMeta.type,
               enabled: existing.enabled,
               customLabel: existing.customLabel || null,
+              refTargetCol: existing.refTargetCol || null,
+              refTargetTable: existing.refTargetTable || null,
               groupId: existing.groupId || null,
               widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
             });
