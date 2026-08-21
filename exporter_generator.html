@@ -955,6 +955,52 @@
       return String(row.id || '');
     }
 
+    // Resolve a column's value using a manual ref target override (refTargetCol + refTargetTable).
+    // Finds ANY Ref column in the same section/row that points to refTargetTable, uses it to
+    // look up the correct record, then returns the value of refTargetCol from that record.
+    function resolveByRefTarget(row, sec, colMeta) {
+      const { refTargetCol, refTargetTable } = colMeta;
+      if (!refTargetCol || !refTargetTable) return '';
+
+      const targetRecords = tableRecordsCache[refTargetTable];
+      if (!targetRecords) return String(row[colMeta.colId] ?? '');
+
+      // Find the Ref column in this section that points to refTargetTable
+      const refCol = (sec.columns || []).find(c =>
+        c.type && (
+          c.type === `Ref:${refTargetTable}` ||
+          c.type === `RefList:${refTargetTable}`
+        )
+      );
+
+      let refId = null;
+      if (refCol && row[refCol.colId] !== undefined && row[refCol.colId] !== null) {
+        const rawRef = row[refCol.colId];
+        refId = typeof rawRef === 'object' ? (rawRef.id ?? rawRef) : rawRef;
+      }
+
+      // Fallback: try to use the cell value itself as the ID
+      if (refId === null || refId === undefined) {
+        const rawCell = row[colMeta.colId];
+        if (rawCell !== undefined && rawCell !== null) {
+          refId = typeof rawCell === 'object' ? (rawCell.id ?? rawCell) : rawCell;
+        }
+      }
+
+      if (refId === null || refId === undefined || refId === '') return '';
+
+      const targetRow = targetRecords.find(r => String(r.id) === String(refId));
+      if (!targetRow) return String(refId);
+
+      const target = refTargetCol.toLowerCase();
+      for (const [k, v] of Object.entries(targetRow)) {
+        if (k.toLowerCase() === target && v !== undefined && v !== null) {
+          return String(v);
+        }
+      }
+      return '';
+    }
+
     function resolveRefDisplayValue(cellVal, colType, colMeta = null) {
       if (cellVal === undefined || cellVal === null || cellVal === '') return '';
       
@@ -2539,13 +2585,17 @@
               const colMeta = sec.columns.find(col => col.colId === slot.colId);
               let cellVal = row[colMeta.colId];
               const helperColId = 'gristHelper_Display_' + colMeta.colId;
-              const colMetaWithRow = colMeta ? { ...colMeta, _currentRow: row } : null;
-              if (colMeta.refTargetCol || (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:')))) {
-                cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMetaWithRow);
+
+              if (colMeta.refTargetCol && colMeta.refTargetTable) {
+                // Manual ref override: look up via any Ref column in this section that points to the target table
+                cellVal = resolveByRefTarget(row, sec, colMeta);
+              } else if (colMeta.type && (colMeta.type.startsWith('Ref:') || colMeta.type.startsWith('RefList:'))) {
+                cellVal = resolveRefDisplayValue(cellVal, colMeta.type, colMeta);
               } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
                 cellVal = row[helperColId];
               }
-              const val = formatCellValue(cellVal, colMeta.type, colMetaWithRow);
+
+              const val = formatCellValue(cellVal, colMeta.type, colMeta);
               const align = colMeta.widgetOptions?.alignment || 'left';
               const cellBg = colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor}` : '';
               const cellColor = colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor}` : '';
@@ -2580,13 +2630,17 @@
 
             let cellVal = row[c.colId];
             const helperColId = 'gristHelper_Display_' + c.colId;
-            const cWithRow = c ? { ...c, _currentRow: row } : null;
-            if (c.refTargetCol || (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:')))) {
-              cellVal = resolveRefDisplayValue(cellVal, c.type, cWithRow);
+
+            if (c.refTargetCol && c.refTargetTable) {
+              // Manual ref override: look up via any Ref column in this section that points to the target table
+              cellVal = resolveByRefTarget(row, sec, c);
+            } else if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
+              cellVal = resolveRefDisplayValue(cellVal, c.type, c);
             } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
               cellVal = row[helperColId];
             }
-            const val = formatCellValue(cellVal, c.type, cWithRow);
+
+            const val = formatCellValue(cellVal, c.type, c);
             const align = c.widgetOptions?.alignment || 'left';
             const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
             const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
