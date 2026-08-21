@@ -691,6 +691,11 @@
     <div class="drawer-content" id="drawer-columns-list">
       <!-- Dynamic list of draggable column cards -->
     </div>
+    <div style="padding: 12px; border-top: 1px solid var(--border-color); background: var(--panel-bg);">
+      <button class="btn-action" style="width: 100%; padding: 8px; font-size: 0.82rem;" onclick="saveConfigToGrist()">
+        💾 Salvar Configuração no Grist
+      </button>
+    </div>
   </div>
 
   <script type="module">
@@ -1558,7 +1563,6 @@
     function closeColumnsDrawer() {
       document.getElementById('columns-drawer').classList.remove('open');
       activeDrawerSectionId = null;
-      saveConfigToGrist();
     }
 
     function syncLayoutItems(sec) {
@@ -1730,7 +1734,6 @@
       sec.layoutItems.unshift(newGrp); // Add to TOP
       renderDrawerColumns();
       updatePreview();
-      saveConfigToGrist();
     }
 
     function moveLayoutItem(index, direction) {
@@ -1750,7 +1753,6 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
-      saveConfigToGrist();
     }
 
     function updateColumnsOrderFromLayout(sec) {
@@ -1794,7 +1796,6 @@
 
       renderDrawerColumns();
       updatePreview();
-      saveConfigToGrist();
     }
 
     function moveColumnToGroup(colId, targetGroupId) {
@@ -1838,7 +1839,6 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
-      saveConfigToGrist();
     }
 
     function onGroupColWidthChange(groupId, colId, width) {
@@ -1852,7 +1852,6 @@
         slot.width = isNaN(w) || w <= 0 ? 25 : w;
         renderDrawerColumns();
         updatePreview();
-        saveConfigToGrist();
       }
     }
 
@@ -1886,7 +1885,6 @@
         updateColumnsOrderFromLayout(sec);
         renderDrawerColumns();
         updatePreview();
-        saveConfigToGrist();
       }
     }
 
@@ -2444,7 +2442,6 @@
       updateColumnsOrderFromLayout(sec);
       renderDrawerColumns();
       updatePreview();
-      saveConfigToGrist();
     }
 
     // Expose functions globally for HTML event handlers in ES Module scope
