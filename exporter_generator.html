@@ -646,6 +646,24 @@
         </div>
       </div>
 
+      <div class="form-group flex-row" style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+          <label for="col-gap-select">Separação de Colunas</label>
+          <select id="col-gap-select" onchange="updatePreview()">
+            <option value="0px">Sem Espaço (0px)</option>
+            <option value="4px">Sutil (4px)</option>
+            <option value="6px" selected>Médio (6px)</option>
+            <option value="10px">Largo (10px)</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1; justify-content: flex-end;">
+          <label class="drawer-option-toggle" style="margin-top: 20px;">
+            <input type="checkbox" id="col-border-checkbox" onchange="updatePreview()">
+            <span>Linha Divisória |</span>
+          </label>
+        </div>
+      </div>
+
       <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 5px 0;">
 
       <!-- Sections Hierarchy Area -->
@@ -936,6 +954,8 @@
               document.getElementById('subsection-indent-select').value = config.subIndent !== undefined ? config.subIndent : '0px';
               if (config.fieldPadding) document.getElementById('field-padding-select').value = config.fieldPadding;
               if (config.cardPadding) document.getElementById('card-padding-select').value = config.cardPadding;
+              if (config.colGap) document.getElementById('col-gap-select').value = config.colGap;
+              document.getElementById('col-border-checkbox').checked = config.showColBorder === true;
               
               reportSections = config.hierarchy;
               sanitizeSections(reportSections);
@@ -1022,6 +1042,8 @@
       const subIndent = document.getElementById('subsection-indent-select').value;
       const fieldPadding = document.getElementById('field-padding-select').value;
       const cardPadding = document.getElementById('card-padding-select').value;
+      const colGap = document.getElementById('col-gap-select').value;
+      const showColBorder = document.getElementById('col-border-checkbox').checked;
 
       const buildConfigJson = (sections) => {
         return sections.map(sec => ({
@@ -2199,6 +2221,7 @@
       const subIndent = document.getElementById('subsection-indent-select').value;
       const fieldPadding = document.getElementById('field-padding-select').value;
       const cardPadding = document.getElementById('card-padding-select').value;
+      const colGap = document.getElementById('col-gap-select').value;
 
       document.getElementById('pdf-title').innerText = title;
       document.getElementById('pdf-subtitle').innerText = subtitle;
@@ -2210,6 +2233,7 @@
       sheet.style.setProperty('--pdf-sub-indent', subIndent);
       sheet.style.setProperty('--field-padding', fieldPadding);
       sheet.style.setProperty('--card-padding', cardPadding);
+      sheet.style.setProperty('--col-gap', colGap);
 
       // Render hierarchical preview content
       const pdfContent = document.getElementById('pdf-sections-content');
@@ -2348,9 +2372,10 @@
 
             if (validCols.length === 0) return;
 
-            const gridTemplate = validCols.map(s => (s.width || (100 / validCols.length)) + '%').join(' ');
+            const showColBorder = document.getElementById('col-border-checkbox')?.checked;
+            const gridTemplate = validCols.map(s => (s.width || (100 / validCols.length)) + 'fr').join(' ');
 
-            const groupFieldsHtml = validCols.map(slot => {
+            const groupFieldsHtml = validCols.map((slot, idx) => {
               const colMeta = sec.columns.find(col => col.colId === slot.colId);
               let cellVal = row[colMeta.colId];
               const helperColId = 'gristHelper_Display_' + colMeta.colId;
@@ -2367,8 +2392,11 @@
               const cellItalic = colMeta.widgetOptions?.fontItalic ? 'font-style: italic' : '';
               const colName = colMeta.useLabel !== false ? colMeta.label : colMeta.colId;
 
+              const isLast = idx === validCols.length - 1;
+              const colBorderCss = (showColBorder && !isLast) ? 'border-right: 1px solid #cbd5e1; padding-right: 4px;' : '';
+
               return `
-                <div class="preview-field-container" style="text-align: ${align};" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
@@ -2381,7 +2409,7 @@
             }).join('');
 
             innerContentBlocks.push(`
-              <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: 8px; margin-bottom: 8px; align-items: start;">
+              <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: var(--col-gap, 6px); margin-bottom: 8px; align-items: start; width: 100%;">
                 ${groupFieldsHtml}
               </div>
             `);
