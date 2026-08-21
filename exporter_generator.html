@@ -504,6 +504,21 @@
     .drawer-card-highlight {
       animation: drawerCardHighlight 1.8s ease-out !important;
     }
+    .ctx-btn {
+      padding: 6px 8px;
+      font-size: 0.72rem;
+      color: #f8fafc;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+    }
+    .ctx-btn:hover {
+      background-color: #1e293b;
+      color: #60a5fa;
+    }
     .preview-field-container:hover {
       border-color: rgba(59, 130, 246, 0.6);
       background-color: rgba(239, 246, 255, 0.4);
@@ -1089,6 +1104,8 @@
         subIndent: subIndent,
         fieldPadding: fieldPadding,
         cardPadding: cardPadding,
+        colGap: colGap,
+        showColBorder: showColBorder,
         hierarchy: buildConfigJson(reportSections)
       };
 
@@ -1702,8 +1719,9 @@
                   const label = col ? (col.customLabel || col.label) : slot.colId;
                   const isAlt = col && col.customLabel;
                   return `
-                    <div data-slot-colid="${slot.colId}" style="display: flex; gap: 4px; align-items: center; background: rgba(30, 41, 59, 0.9); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3);" onmousedown="event.stopPropagation()">
-                      <span style="color: var(--text-muted); font-size:0.8rem;">☰</span>
+                    <div data-slot-colid="${slot.colId}" style="display: flex; gap: 4px; align-items: center; background: rgba(30, 41, 59, 0.9); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.3); position: relative;" onmousedown="event.stopPropagation()">
+                      <span style="color: var(--text-muted); font-size:0.8rem; cursor: pointer; padding: 2px 4px; border-radius: 3px; background: rgba(255,255,255,0.06);" onclick="toggleCardContextMenu(event, '${slot.colId}')" title="Clique para abrir Menu">☰</span>
+                      ${renderCardContextMenuHTML(slot.colId, true, item.id, sIdx, itemIdx)}
                       <span style="flex:1; font-size:0.75rem; color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                         ${label} <span style="color:#64748b; font-weight:normal;">(${slot.colId})</span>
                         ${isAlt ? `<span style="color:#fbbf24; font-size:0.68rem; font-weight:normal;"> (alt)</span>` : ''}
@@ -1750,28 +1768,7 @@
                   ${isFormula ? '<span class="column-tag formula">Fórmula</span>' : `<span class="column-tag">${col.type || 'Texto'}</span>`}
                   ${col.customLabel ? `<span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 1px 4px; border-radius: 4px;" title="Rótulo Alternativo: ${col.customLabel}">Rótulo Alt.</span>` : ''}
 
-                  ${openContextMenuColId === col.colId ? `
-                    <div style="position: absolute; top: 26px; left: 0; background: #0f172a; border: 1px solid #3b82f6; border-radius: 6px; padding: 4px; z-index: 100; box-shadow: 0 8px 20px rgba(0,0,0,0.7); min-width: 210px;" onmousedown="event.stopPropagation()">
-                      <div onclick="promptCustomLabel('${col.colId}')" style="padding: 6px 8px; font-size: 0.72rem; color: #fff; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='transparent'">
-                        <span>✏️</span>
-                        <span>${col.customLabel ? 'Editar Rótulo Alternativo' : 'Criar Rótulo Alternativo'}</span>
-                      </div>
-                      ${col.customLabel ? `
-                        <div onclick="clearCustomLabel('${col.colId}')" style="padding: 6px 8px; font-size: 0.72rem; color: #f87171; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='transparent'">
-                          <span>🗑️</span>
-                          <span>Restaurar Rótulo Padrão</span>
-                        </div>
-                      ` : ''}
-                      <div onclick="toggleDrawerColumnLabelMode(${colIdx})" style="padding: 6px 8px; font-size: 0.72rem; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='transparent'">
-                        <span>🏷️</span>
-                        <span>${col.useLabel !== false ? 'Usar ID Puro no Relatório' : 'Usar Rótulo Grist'}</span>
-                      </div>
-                      <div onclick="toggleDrawerColumnEnabled(${colIdx})" style="padding: 6px 8px; font-size: 0.72rem; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 6px; border-radius: 4px;" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='transparent'">
-                        <span>👁️</span>
-                        <span>${col.enabled !== false ? 'Ocultar no Relatório' : 'Exibir no Relatório'}</span>
-                      </div>
-                    </div>
-                  ` : ''}
+                  ${renderCardContextMenuHTML(col.colId, false, null, null, itemIdx)}
                 </div>
                 <div style="display: flex; align-items: center; gap: 3px;">
                   <!-- Icon Ativa -->
@@ -2672,14 +2669,159 @@
       }
     }
 
+    function renderCardContextMenuHTML(colId, isGroupSlot = false, groupId = null, slotIdx = null, itemIdx = null) {
+      if (openContextMenuColId !== colId) return '';
+
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return '';
+      const colIdx = sec.columns.findIndex(c => c.colId === colId);
+      if (colIdx === -1) return '';
+      const col = sec.columns[colIdx];
+
+      return `
+        <div style="position: absolute; top: 26px; left: 0; background: #0f172a; border: 1px solid #3b82f6; border-radius: 6px; padding: 4px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.8); min-width: 220px;" onmousedown="event.stopPropagation()">
+          <div onclick="promptCustomLabel('${colId}')" class="ctx-btn">
+            <span>✏️</span> <span>${col.customLabel ? 'Editar Rótulo Alternativo' : 'Criar Rótulo Alternativo'}</span>
+          </div>
+          ${col.customLabel ? `
+            <div onclick="clearCustomLabel('${colId}')" class="ctx-btn" style="color: #f87171;">
+              <span>🗑️</span> <span>Restaurar Rótulo Padrão</span>
+            </div>
+          ` : ''}
+          <div onclick="toggleDrawerColumnLabelMode(${colIdx})" class="ctx-btn">
+            <span>🏷️</span> <span>${col.useLabel !== false ? 'Usar ID Puro no Relatório' : 'Usar Rótulo Grist'}</span>
+          </div>
+          <div onclick="toggleDrawerColumnEnabled(${colIdx})" class="ctx-btn">
+            <span>👁️</span> <span>${col.enabled !== false ? 'Ocultar no Relatório' : 'Exibir no Relatório'}</span>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
+
+          ${isGroupSlot ? `
+            <div onclick="moveColInsideGroupSteps('${groupId}', ${slotIdx}, 'top')" class="ctx-btn">
+              <span>⏫</span> <span>Topo do Grupo</span>
+            </div>
+            <div onclick="moveColInsideGroupSteps('${groupId}', ${slotIdx}, -10)" class="ctx-btn">
+              <span>⬆️</span> <span>10 Posições para Cima</span>
+            </div>
+            <div onclick="moveColInsideGroupSteps('${groupId}', ${slotIdx}, 10)" class="ctx-btn">
+              <span>⬇️</span> <span>10 Posições para Baixo</span>
+            </div>
+            <div onclick="moveColInsideGroupSteps('${groupId}', ${slotIdx}, 'bottom')" class="ctx-btn">
+              <span>⏬</span> <span>Final do Grupo</span>
+            </div>
+            <div onclick="moveColumnToGroup('${colId}', null)" class="ctx-btn" style="color:#f87171;">
+              <span>🚪</span> <span>Remover deste Grupo</span>
+            </div>
+          ` : `
+            <div onclick="moveLayoutItemSteps(${itemIdx}, 'top')" class="ctx-btn">
+              <span>⏫</span> <span>Enviar para o Topo</span>
+            </div>
+            <div onclick="moveLayoutItemSteps(${itemIdx}, -10)" class="ctx-btn">
+              <span>⬆️</span> <span>10 Posições para Cima</span>
+            </div>
+            <div onclick="moveLayoutItemSteps(${itemIdx}, 10)" class="ctx-btn">
+              <span>⬇️</span> <span>10 Posições para Baixo</span>
+            </div>
+            <div onclick="moveLayoutItemSteps(${itemIdx}, 'bottom')" class="ctx-btn">
+              <span>⏬</span> <span>Enviar para o Final</span>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function moveLayoutItemSteps(itemIdx, steps) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+
+      const targetItem = sec.layoutItems[itemIdx];
+      if (!targetItem) return;
+
+      let newIdx = itemIdx;
+      if (steps === 'top') {
+        newIdx = 0;
+      } else if (steps === 'bottom') {
+        newIdx = sec.layoutItems.length - 1;
+      } else {
+        newIdx = Math.max(0, Math.min(sec.layoutItems.length - 1, itemIdx + steps));
+      }
+
+      if (newIdx !== itemIdx) {
+        sec.layoutItems.splice(itemIdx, 1);
+        sec.layoutItems.splice(newIdx, 0, targetItem);
+        updateColumnsOrderFromLayout(sec);
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+
+        setTimeout(() => {
+          const container = document.getElementById('drawer-columns-list');
+          if (!container) return;
+          const colId = targetItem.colId;
+          let el = colId ? container.querySelector(`[data-colid="${colId}"]`) : container.querySelector(`[data-layout-index="${newIdx}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.remove('drawer-card-highlight');
+            void el.offsetWidth;
+            el.classList.add('drawer-card-highlight');
+            setTimeout(() => el.classList.remove('drawer-card-highlight'), 1800);
+          }
+        }, 100);
+      }
+    }
+
+    function moveColInsideGroupSteps(groupId, slotIdx, steps) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (!grp || !grp.cols) return;
+
+      const slot = grp.cols[slotIdx];
+      if (!slot) return;
+
+      let newIdx = slotIdx;
+      if (steps === 'top') {
+        newIdx = 0;
+      } else if (steps === 'bottom') {
+        newIdx = grp.cols.length - 1;
+      } else {
+        newIdx = Math.max(0, Math.min(grp.cols.length - 1, slotIdx + steps));
+      }
+
+      if (newIdx !== slotIdx) {
+        grp.cols.splice(slotIdx, 1);
+        grp.cols.splice(newIdx, 0, slot);
+        updateColumnsOrderFromLayout(sec);
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+
+        setTimeout(() => {
+          const container = document.getElementById('drawer-columns-list');
+          if (!container) return;
+          const el = container.querySelector(`[data-slot-colid="${slot.colId}"]`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.remove('drawer-card-highlight');
+            void el.offsetWidth;
+            el.classList.add('drawer-card-highlight');
+            setTimeout(() => el.classList.remove('drawer-card-highlight'), 1800);
+          }
+        }, 100);
+      }
+    }
+
     document.addEventListener('click', (e) => {
-      if (openContextMenuColId !== null && !e.target.closest('.drawer-column-title')) {
+      if (openContextMenuColId !== null && !e.target.closest('.drawer-column-title') && !e.target.closest('.card-ctx-menu')) {
         openContextMenuColId = null;
         renderDrawerColumns();
       }
     });
 
     // Expose functions globally for HTML event handlers in ES Module scope
+    window.moveLayoutItemSteps = moveLayoutItemSteps;
+    window.moveColInsideGroupSteps = moveColInsideGroupSteps;
     window.toggleCardContextMenu = toggleCardContextMenu;
     window.promptCustomLabel = promptCustomLabel;
     window.clearCustomLabel = clearCustomLabel;
