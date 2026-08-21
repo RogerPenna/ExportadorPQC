@@ -2516,47 +2516,49 @@
     function formatCellValue(val, type, colMeta = null) {
       if (val === undefined || val === null) return '';
 
+      let formatted = '';
       if (colMeta && colMeta.refTargetCol) {
-        return resolveRefDisplayValue(val, type, colMeta);
-      }
-
-      if (type && (type.startsWith('Ref:') || type.startsWith('RefList:'))) {
-        return resolveRefDisplayValue(val, type, colMeta);
-      }
-      
-      // Handle Boolean (Bool)
-      if (typeof val === 'boolean' || type === 'Bool') {
-        return val ? 'Sim' : 'Não';
-      }
-      
-      // Handle Arrays (ChoiceList, RefList, etc.)
-      if (Array.isArray(val)) {
+        formatted = resolveRefDisplayValue(val, type, colMeta);
+      } else if (type && (type.startsWith('Ref:') || type.startsWith('RefList:'))) {
+        formatted = resolveRefDisplayValue(val, type, colMeta);
+      } else if (typeof val === 'boolean' || type === 'Bool') {
+        formatted = val ? 'Sim' : 'Não';
+      } else if (Array.isArray(val)) {
         let list = val;
         if (val[0] === 'L') {
           list = val.slice(1);
         }
-        return list.map(item => {
+        formatted = list.map(item => {
           if (item && typeof item === 'object') {
             return item.label || item.id || JSON.stringify(item);
           }
           return item;
         }).join(', ');
-      }
-      
-      // Handle Reference objects (Ref:Table)
-      if (typeof val === 'object') {
-        return val.label || val.id || JSON.stringify(val);
-      }
-      
-      // Handle Dates (Date/DateTime)
-      if (type && type.startsWith('Date') && typeof val === 'string') {
+      } else if (typeof val === 'object') {
+        formatted = val.label || val.id || JSON.stringify(val);
+      } else if (type && type.startsWith('Date') && typeof val === 'string') {
         const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
         if (match) {
-          return `${match[3]}/${match[2]}/${match[1]}`;
+          formatted = `${match[3]}/${match[2]}/${match[1]}`;
+        } else {
+          formatted = String(val);
+        }
+      } else {
+        formatted = String(val);
+      }
+
+      // Format direction arrows (⬆ / ⬇) as Grist-style colored pill badges
+      if (typeof formatted === 'string') {
+        const trimmed = formatted.trim();
+        if (trimmed === '⬆' || trimmed.includes('⬆')) {
+          return `<span style="display: inline-flex; align-items: center; justify-content: center; background: #2563eb; color: #ffffff; padding: 2px 7px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; font-family: system-ui, -apple-system, sans-serif; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.15);" title="Melhor Sentido: Subir (⬆)">⬆</span>`;
+        }
+        if (trimmed === '⬇' || trimmed.includes('⬇')) {
+          return `<span style="display: inline-flex; align-items: center; justify-content: center; background: #dc2626; color: #ffffff; padding: 2px 7px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; font-family: system-ui, -apple-system, sans-serif; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.15);" title="Melhor Sentido: Descer (⬇)">⬇</span>`;
         }
       }
-      
-      return String(val);
+
+      return formatted;
     }
 
     // Recursive records renderer
