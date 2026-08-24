@@ -2862,41 +2862,44 @@
       const rightPanel = document.querySelector('.right-panel');
       if (!sheet) return;
 
+      // 1. Force fresh DOM preview update
+      updatePreview();
+
       const savedScrollTop = rightPanel ? rightPanel.scrollTop : 0;
       const savedWindowY = window.scrollY;
 
-      // Scroll container and window to top to ensure html2canvas captures at y=0
-      if (rightPanel) rightPanel.scrollTop = 0;
+      // 2. Temporarily disable panel scroll and overflow restriction so html2canvas sees full sheet height
+      if (rightPanel) {
+        rightPanel.scrollTop = 0;
+        rightPanel.style.overflow = 'visible';
+        rightPanel.style.height = 'auto';
+      }
       window.scrollTo(0, 0);
 
       sheet.classList.add('exporting-pdf');
       
-      // Allow DOM, scroll and CSS changes to settle before canvas capture
+      // 3. Allow layout to settle before capture
       await new Promise(r => setTimeout(r, 250));
-
-      const totalHeight = sheet.scrollHeight || sheet.offsetHeight || 1000;
-      // Calculate dynamic scale to ensure canvas height stays within browser's 15,000px limit
-      const safeScale = Math.max(1, Math.min(2, 15000 / totalHeight));
-
-      logDebug(`Iniciando geração de PDF (Altura: ${totalHeight}px, Escala: ${safeScale.toFixed(2)})...`);
 
       const opt = {
         margin:       0,
         filename:     `Relatorio_Hierarquico_PQC.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { 
-          scale: safeScale, 
+          scale: 2, 
           useCORS: true,
           backgroundColor: '#ffffff',
           scrollY: 0,
           scrollX: 0,
-          windowWidth: sheet.scrollWidth || 794,
-          windowHeight: totalHeight,
           logging: false,
           onclone: (clonedDoc) => {
             const clonedSheet = clonedDoc.getElementById('pdf-preview-sheet');
             const clonedPanel = clonedDoc.querySelector('.right-panel');
-            if (clonedPanel) clonedPanel.scrollTop = 0;
+            if (clonedPanel) {
+              clonedPanel.style.overflow = 'visible';
+              clonedPanel.style.height = 'auto';
+              clonedPanel.scrollTop = 0;
+            }
             if (clonedSheet) {
               clonedSheet.style.transform = 'none';
               clonedSheet.style.margin = '0 auto';
@@ -2909,7 +2912,8 @@
       };
 
       try {
-        await html2pdf().from(sheet).set(opt).save();
+        logDebug("Iniciando geração do PDF em alta resolução...");
+        await html2pdf().set(opt).from(sheet).save();
         logDebug("PDF gerado e baixado com sucesso!");
       } catch (err) {
         logDebug("Erro ao gerar PDF: " + err.message);
@@ -2917,7 +2921,11 @@
         alert("Erro ao gerar PDF: " + err.message);
       } finally {
         sheet.classList.remove('exporting-pdf');
-        if (rightPanel) rightPanel.scrollTop = savedScrollTop;
+        if (rightPanel) {
+          rightPanel.style.overflow = '';
+          rightPanel.style.height = '';
+          rightPanel.scrollTop = savedScrollTop;
+        }
         window.scrollTo(0, savedWindowY);
       }
     }
