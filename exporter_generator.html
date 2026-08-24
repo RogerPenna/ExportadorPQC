@@ -2421,7 +2421,12 @@
               <label>Coluna de Ligação ao Pai (Filtro)</label>
               <select id="link-${sec.id}" onchange="onSectionLinkChange('${sec.id}')">
                 <option value="">-- Sem filtro (mostrar tudo) --</option>
-                ${sec.columns.map(c => `<option value="${c.colId}" ${c.colId === sec.linkColumn ? 'selected' : ''}>${c.label} (${c.colId})</option>`).join('')}
+                ${sec.columns.map(c => {
+                  const isRef = c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'));
+                  const targetTable = isRef ? (c.type.startsWith('Ref:') ? c.type.substring(4).trim() : c.type.substring(8).trim()) : '';
+                  const badge = isRef ? ` 🔗 [Link -> ${targetTable}]` : '';
+                  return `<option value="${c.colId}" ${c.colId === sec.linkColumn ? 'selected' : ''}>${c.label} (${c.colId})${badge}</option>`;
+                }).join('')}
               </select>
             </div>
           ` : ''}
@@ -2559,6 +2564,37 @@
       return valStr;
     }
 
+    function formatNumericValue(val, type, colMeta = null) {
+      const num = Number(val);
+      if (isNaN(num)) return String(val);
+
+      let dec = null;
+      if (colMeta && colMeta.widgetOptions) {
+        const opts = colMeta.widgetOptions;
+        if (opts.decimals !== undefined && opts.decimals !== null && !isNaN(parseInt(opts.decimals))) {
+          dec = parseInt(opts.decimals);
+        } else if (opts.maxDecimals !== undefined && opts.maxDecimals !== null && !isNaN(parseInt(opts.maxDecimals))) {
+          dec = parseInt(opts.maxDecimals);
+        }
+      }
+
+      if (dec !== null && dec >= 0) {
+        return num.toLocaleString('pt-BR', {
+          minimumFractionDigits: dec,
+          maximumFractionDigits: dec
+        });
+      }
+
+      if (!Number.isInteger(num)) {
+        return num.toLocaleString('pt-BR', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        });
+      }
+
+      return num.toLocaleString('pt-BR');
+    }
+
     function formatCellValue(val, type, colMeta = null) {
       if (val === undefined || val === null) return '';
 
@@ -2621,6 +2657,10 @@
         } else {
           formatted = String(val);
         }
+      } else if (typeof val === 'number') {
+        formatted = formatNumericValue(val, type, colMeta);
+      } else if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val)) && val.includes('.')) {
+        formatted = formatNumericValue(val, type, colMeta);
       } else {
         formatted = String(val);
       }
