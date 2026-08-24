@@ -244,6 +244,8 @@
     /* PDF Paper Preview */
     .paper-container {
       width: 210mm;
+      max-width: 210mm;
+      box-sizing: border-box !important;
       min-height: 297mm;
       background-color: #ffffff;
       box-shadow: 0 10px 25px rgba(0,0,0,0.1);
@@ -542,6 +544,16 @@
     }
     
     /* PDF Export Overrides */
+    .exporting-pdf {
+      box-shadow: none !important;
+      width: 210mm !important;
+      max-width: 210mm !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+    }
+    .exporting-pdf * {
+      box-sizing: border-box !important;
+    }
     .exporting-pdf .print-only-section-title {
       display: block !important;
     }
@@ -555,6 +567,12 @@
       margin-bottom: 0 !important;
       background-color: transparent !important;
       box-shadow: none !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .exporting-pdf .pdf-record-card {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
     .exporting-pdf .preview-field-container {
       border: none !important;
@@ -562,6 +580,8 @@
       margin-bottom: 0 !important;
       background-color: transparent !important;
       box-shadow: none !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
     .exporting-pdf .preview-field-controls {
       display: none !important;
@@ -2839,24 +2859,38 @@
 
     async function exportPDF() {
       const sheet = document.getElementById('pdf-preview-sheet');
+      if (!sheet) return;
+
       sheet.classList.add('exporting-pdf');
       
-      const marginVal = parseInt(document.getElementById('page-margin-select').value, 10) || 10;
+      // Allow DOM and CSS changes to apply before canvas rendering
+      await new Promise(r => setTimeout(r, 150));
 
       const opt = {
-        margin:       marginVal,
+        margin:       0,
         filename:     `Relatorio_Hierarquico_PQC.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        html2canvas:  { 
+          scale: 2, 
+          useCORS: true,
+          scrollY: 0,
+          scrollX: 0,
+          windowWidth: sheet.scrollWidth || 794,
+          logging: false
+        },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-record-card', '.preview-field-container', '.preview-section-container'] }
       };
 
       try {
         await html2pdf().from(sheet).set(opt).save();
       } catch (err) {
         console.error("Erro ao gerar PDF:", err);
+        alert("Erro ao gerar PDF: " + err.message);
       } finally {
-        sheet.classList.remove('exporting-pdf');
+        setTimeout(() => {
+          sheet.classList.remove('exporting-pdf');
+        }, 600);
       }
     }
 
