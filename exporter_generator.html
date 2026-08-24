@@ -2862,24 +2862,24 @@
       const rightPanel = document.querySelector('.right-panel');
       if (!sheet) return;
 
-      // 1. Force fresh DOM preview update
+      // Force a fresh DOM preview render
       updatePreview();
+      await new Promise(r => setTimeout(r, 200));
 
-      const savedScrollTop = rightPanel ? rightPanel.scrollTop : 0;
-      const savedWindowY = window.scrollY;
+      logDebug("Iniciando geração do PDF...");
 
-      // 2. Temporarily disable panel scroll and overflow restriction so html2canvas sees full sheet height
-      if (rightPanel) {
-        rightPanel.scrollTop = 0;
-        rightPanel.style.overflow = 'visible';
-        rightPanel.style.height = 'auto';
-      }
-      window.scrollTo(0, 0);
+      // Temporarily detach sheet from clipped right-panel and attach to body
+      // so html2canvas can see the full height without scroll/overflow clipping
+      const sheetParent = sheet.parentNode;
+      const sheetNextSibling = sheet.nextSibling;
+
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:absolute; top:0; left:-9999px; width:210mm; z-index:-1; background:#fff;';
+      document.body.appendChild(wrapper);
+      wrapper.appendChild(sheet);
 
       sheet.classList.add('exporting-pdf');
-      
-      // 3. Allow layout to settle before capture
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 100));
 
       const opt = {
         margin:       0,
@@ -2891,28 +2891,13 @@
           backgroundColor: '#ffffff',
           scrollY: 0,
           scrollX: 0,
-          logging: false,
-          onclone: (clonedDoc) => {
-            const clonedSheet = clonedDoc.getElementById('pdf-preview-sheet');
-            const clonedPanel = clonedDoc.querySelector('.right-panel');
-            if (clonedPanel) {
-              clonedPanel.style.overflow = 'visible';
-              clonedPanel.style.height = 'auto';
-              clonedPanel.scrollTop = 0;
-            }
-            if (clonedSheet) {
-              clonedSheet.style.transform = 'none';
-              clonedSheet.style.margin = '0 auto';
-              clonedSheet.style.backgroundColor = '#ffffff';
-            }
-          }
+          logging: false
         },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-record-card', '.preview-field-container', '.preview-section-container'] }
       };
 
       try {
-        logDebug("Iniciando geração do PDF em alta resolução...");
         await html2pdf().set(opt).from(sheet).save();
         logDebug("PDF gerado e baixado com sucesso!");
       } catch (err) {
@@ -2920,13 +2905,14 @@
         console.error("Erro ao gerar PDF:", err);
         alert("Erro ao gerar PDF: " + err.message);
       } finally {
+        // Restore sheet to its original location
         sheet.classList.remove('exporting-pdf');
-        if (rightPanel) {
-          rightPanel.style.overflow = '';
-          rightPanel.style.height = '';
-          rightPanel.scrollTop = savedScrollTop;
+        if (sheetNextSibling) {
+          sheetParent.insertBefore(sheet, sheetNextSibling);
+        } else {
+          sheetParent.appendChild(sheet);
         }
-        window.scrollTo(0, savedWindowY);
+        document.body.removeChild(wrapper);
       }
     }
 
