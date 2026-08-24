@@ -2859,12 +2859,20 @@
 
     async function exportPDF() {
       const sheet = document.getElementById('pdf-preview-sheet');
+      const rightPanel = document.querySelector('.right-panel');
       if (!sheet) return;
+
+      const savedScrollTop = rightPanel ? rightPanel.scrollTop : 0;
+      const savedWindowY = window.scrollY;
+
+      // Scroll container and window to top to ensure html2canvas captures at y=0
+      if (rightPanel) rightPanel.scrollTop = 0;
+      window.scrollTo(0, 0);
 
       sheet.classList.add('exporting-pdf');
       
-      // Allow DOM and CSS changes to apply before canvas rendering
-      await new Promise(r => setTimeout(r, 150));
+      // Allow DOM, scroll and CSS changes to settle before canvas capture
+      await new Promise(r => setTimeout(r, 200));
 
       const opt = {
         margin:       0,
@@ -2876,7 +2884,16 @@
           scrollY: 0,
           scrollX: 0,
           windowWidth: sheet.scrollWidth || 794,
-          logging: false
+          logging: false,
+          onclone: (clonedDoc) => {
+            const clonedSheet = clonedDoc.getElementById('pdf-preview-sheet');
+            const clonedPanel = clonedDoc.querySelector('.right-panel');
+            if (clonedPanel) clonedPanel.scrollTop = 0;
+            if (clonedSheet) {
+              clonedSheet.style.transform = 'none';
+              clonedSheet.style.margin = '0 auto';
+            }
+          }
         },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-record-card', '.preview-field-container', '.preview-section-container'] }
@@ -2888,9 +2905,9 @@
         console.error("Erro ao gerar PDF:", err);
         alert("Erro ao gerar PDF: " + err.message);
       } finally {
-        setTimeout(() => {
-          sheet.classList.remove('exporting-pdf');
-        }, 600);
+        sheet.classList.remove('exporting-pdf');
+        if (rightPanel) rightPanel.scrollTop = savedScrollTop;
+        window.scrollTo(0, savedWindowY);
       }
     }
 
