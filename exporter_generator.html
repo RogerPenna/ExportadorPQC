@@ -2859,53 +2859,97 @@
 
     async function exportPDF() {
       const sheet = document.getElementById('pdf-preview-sheet');
-      const rightPanel = document.querySelector('.right-panel');
-      if (!sheet) return;
+      if (!sheet) { logDebug("ERRO: #pdf-preview-sheet não encontrado!"); return; }
 
       // Force a fresh DOM preview render
       updatePreview();
       await new Promise(r => setTimeout(r, 200));
 
-      logDebug("Iniciando geração do PDF...");
+      // --- DIAGNOSTIC: report sheet state before move ---
+      logDebug(`[PDF] sheet.scrollHeight=${sheet.scrollHeight} offsetHeight=${sheet.offsetHeight} clientHeight=${sheet.clientHeight}`);
+      logDebug(`[PDF] sheet.scrollWidth=${sheet.scrollWidth} offsetWidth=${sheet.offsetWidth}`);
+      logDebug(`[PDF] sheet children count=${sheet.children.length} innerHTML length=${sheet.innerHTML.length}`);
+      logDebug(`[PDF] #pdf-sections-content length=${document.getElementById('pdf-sections-content')?.innerHTML?.length}`);
 
       // Temporarily detach sheet from clipped right-panel and attach to body
-      // so html2canvas can see the full height without scroll/overflow clipping
       const sheetParent = sheet.parentNode;
       const sheetNextSibling = sheet.nextSibling;
 
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position:absolute; top:0; left:-9999px; width:210mm; z-index:-1; background:#fff;';
+      wrapper.style.cssText = 'position:fixed; top:0; left:0; width:210mm; z-index:99999; background:#fff; visibility:hidden;';
       document.body.appendChild(wrapper);
       wrapper.appendChild(sheet);
 
       sheet.classList.add('exporting-pdf');
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 200));
 
-      const opt = {
-        margin:       0,
-        filename:     `Relatorio_Hierarquico_PQC.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { 
-          scale: 2, 
+      // --- DIAGNOSTIC: report sheet state after move ---
+      logDebug(`[PDF after move] sheet.scrollHeight=${sheet.scrollHeight} offsetHeight=${sheet.offsetHeight}`);
+      logDebug(`[PDF after move] wrapper.scrollHeight=${wrapper.scrollHeight}`);
+
+      try {
+        logDebug("[PDF] Chamando html2canvas diretamente para diagnóstico...");
+        const canvas = await html2canvas(sheet, {
+          scale: 2,
           useCORS: true,
           backgroundColor: '#ffffff',
           scrollY: 0,
           scrollX: 0,
           logging: false
-        },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.pdf-record-card', '.preview-field-container', '.preview-section-container'] }
-      };
+        });
 
-      try {
-        await html2pdf().set(opt).from(sheet).save();
-        logDebug("PDF gerado e baixado com sucesso!");
+        logDebug(`[PDF] canvas.width=${canvas.width} canvas.height=${canvas.height}`);
+
+        // Sample pixel at center to check if it's not blank
+        const ctx = canvas.getContext('2d');
+        const centerX = Math.floor(canvas.width / 2);
+        const centerY = Math.floor(canvas.height / 2);
+        const pixel = ctx.getImageData(centerX, centerY, 1, 1).data;
+        logDebug(`[PDF] pixel central (R,G,B,A) = (${pixel[0]},${pixel[1]},${pixel[2]},${pixel[3]})`);
+
+        const topPixel = ctx.getImageData(100, 100, 1, 1).data;
+        logDebug(`[PDF] pixel topo (R,G,B,A) = (${topPixel[0]},${topPixel[1]},${topPixel[2]},${topPixel[3]})`);
+
+        if (canvas.width < 10 || canvas.height < 10) {
+          logDebug("[PDF] ERRO: canvas com dimensões inválidas! Verifique CSS do sheet.");
+        } else {
+          logDebug("[PDF] Canvas parece válido. Convertendo para PDF...");
+          const { jsPDF } = window.jspdf || {};
+          if (!jsPDF) {
+            // fallback: use html2pdf pipeline
+            const opt = {
+              margin: 0,
+              filename: `Relatorio_Hierarquico_PQC.pdf`,
+              image: { type: 'jpeg', quality: 0.98 },
+              html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, scrollX: 0, logging: false },
+              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+              pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-record-card'] }
+            };
+            await html2pdf().set(opt).from(sheet).save();
+          } else {
+            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+            const pageW = pdf.internal.pageSize.getWidth();
+            const pageH = pdf.internal.pageSize.getHeight();
+            const imgData = canvas.toDataURL('image/jpeg', 0.98);
+            const canvasAspect = canvas.height / canvas.width;
+            const imgH = pageW * canvasAspect;
+            let y = 0;
+            let remainingH = imgH;
+            while (remainingH > 0) {
+              pdf.addImage(imgData, 'JPEG', 0, y, pageW, imgH);
+              remainingH -= pageH;
+              y -= pageH;
+              if (remainingH > 0) pdf.addPage();
+            }
+            pdf.save('Relatorio_Hierarquico_PQC.pdf');
+          }
+          logDebug("[PDF] PDF gerado e baixado com sucesso!");
+        }
       } catch (err) {
-        logDebug("Erro ao gerar PDF: " + err.message);
+        logDebug("[PDF] EXCEÇÃO: " + err.message);
         console.error("Erro ao gerar PDF:", err);
         alert("Erro ao gerar PDF: " + err.message);
       } finally {
-        // Restore sheet to its original location
         sheet.classList.remove('exporting-pdf');
         if (sheetNextSibling) {
           sheetParent.insertBefore(sheet, sheetNextSibling);
