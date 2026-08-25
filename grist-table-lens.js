@@ -167,6 +167,14 @@ export const GristTableLens = function(gristInstance) {
                         });
                     });
                 }
+
+                function getHelperRuleNum(hId) {
+                    if (!hId) return 999;
+                    const m = String(hId).match(/\d+$/);
+                    return m ? parseInt(m[0], 10) : 1;
+                }
+
+                conditionalFormattingRules.sort((a, b) => getHelperRuleNum(a.helperColumnId) - getHelperRuleNum(b.helperColumnId));
                 
                 columnsOutput[entry.colId] = {
                     id: entry.id,

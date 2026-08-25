@@ -3090,6 +3090,12 @@
       }
     }
 
+    function getHelperRuleNum(hId) {
+      if (!hId) return 999;
+      const m = String(hId).match(/\d+$/);
+      return m ? parseInt(m[0], 10) : 1;
+    }
+
     function resolveCellConditionalStyles(row, colMeta) {
       const styles = {
         fillColor: null,
@@ -3100,9 +3106,11 @@
 
       if (!colMeta || !row) return styles;
 
-      const rules = colMeta.conditionalFormattingRules || [];
+      const rawRules = colMeta.conditionalFormattingRules || [];
 
-      if (Array.isArray(rules) && rules.length > 0) {
+      if (Array.isArray(rawRules) && rawRules.length > 0) {
+        const rules = [...rawRules].sort((a, b) => getHelperRuleNum(a.helperColumnId) - getHelperRuleNum(b.helperColumnId));
+
         for (const rule of rules) {
           let isMatch = false;
 
