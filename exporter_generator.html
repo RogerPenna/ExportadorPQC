@@ -2186,6 +2186,10 @@
                   <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.renderAsHtml ? 'background: rgba(168, 85, 247, 0.2); color: #c084fc; border-color: #a855f7;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnHtmlMode('${col.colId}')" title="${col.renderAsHtml ? 'Renderizando como HTML Puro / Rich Text (clique para desativar)' : 'Renderizar como HTML Puro / Rich Text (clique para ativar)'}">
                     🌐 HTML
                   </button>
+                  <!-- Icon Field Page Break -->
+                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.pageBreak === 'page' ? 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: #f59e0b;' : (col.pageBreak === 'space' ? 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;' : 'opacity: 0.4; color: #94a3b8;')}" onclick="cycleDrawerColumnPageBreak('${col.colId}')" title="${col.pageBreak === 'page' ? 'Quebra de Campo: Iniciar em Nova Página A4 (clique p/ alternar)' : (col.pageBreak === 'space' ? 'Quebra de Campo: Espaçamento de 24px (clique p/ alternar)' : 'Quebra de Campo: Sem Quebra (clique p/ alternar)')}">
+                    ${col.pageBreak === 'page' ? '📄 Pág. Nova' : (col.pageBreak === 'space' ? '📏 Espaço' : '📄 Quebra')}
+                  </button>
                   <!-- Up/Down arrows -->
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'up')" title="Mover para Cima">▲</button>
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'down')" title="Mover para Baixo">▼</button>
@@ -2558,6 +2562,29 @@
       if (col) {
         col.renderAsHtml = !col.renderAsHtml;
         logDebug(`Campo '${col.colId}' renderAsHtml setado para: ${col.renderAsHtml}`);
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function cycleDrawerColumnPageBreak(colIdOrIdx) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      let col = null;
+      if (typeof colIdOrIdx === 'string') {
+        col = sec.columns.find(c => c.colId === colIdOrIdx);
+      } else {
+        col = sec.columns[colIdOrIdx];
+      }
+      if (col) {
+        if (!col.pageBreak || col.pageBreak === 'none') {
+          col.pageBreak = 'page';
+        } else if (col.pageBreak === 'page') {
+          col.pageBreak = 'space';
+        } else {
+          col.pageBreak = 'none';
+        }
+        logDebug(`Quebra de página do campo '${col.colId}' alterada para: ${col.pageBreak}`);
         renderDrawerColumns();
         updatePreview();
       }
@@ -3296,10 +3323,17 @@
             const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
             const isRawHtml = c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
 
+            let fieldBreakCss = '';
+            if (c.pageBreak === 'page') {
+              fieldBreakCss = 'break-before: page !important; page-break-before: always !important; margin-top: 0 !important;';
+            } else if (c.pageBreak === 'space') {
+              fieldBreakCss = 'margin-top: 24px !important;';
+            }
+
             if (isRawHtml) {
               const showLabel = c.useLabel === true;
               innerContentBlocks.push(`
-                <div class="preview-field-container preview-html-field" style="margin-bottom: 4px; width: 100%; border: none; padding: 0; background: transparent;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container preview-html-field" style="margin-bottom: 4px; width: 100%; border: none; padding: 0; background: transparent; ${fieldBreakCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
@@ -3313,7 +3347,7 @@
               `);
             } else {
               innerContentBlocks.push(`
-                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px; ${fieldBreakCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
@@ -3883,6 +3917,7 @@
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
     window.toggleDrawerColumnHtmlMode = toggleDrawerColumnHtmlMode;
+    window.cycleDrawerColumnPageBreak = cycleDrawerColumnPageBreak;
     window.toggleDrawerColumnGristStyle = toggleDrawerColumnGristStyle;
     window.onColumnDragStart = onColumnDragStart;
     window.onColumnDragOver = onColumnDragOver;
