@@ -2148,6 +2148,10 @@
                   <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.useLabel !== false ? 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnLabelMode('${col.colId}')" title="${col.useLabel !== false ? 'Exibindo Rótulo (clique para usar ID puro)' : 'Exibindo ID Puro (clique para usar Rótulo)'}">
                     🏷️
                   </button>
+                  <!-- Icon Render as HTML -->
+                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.renderAsHtml ? 'background: rgba(168, 85, 247, 0.2); color: #c084fc; border-color: #a855f7;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnHtmlMode('${col.colId}')" title="${col.renderAsHtml ? 'Renderizando como HTML Puro / Rich Text (clique para desativar)' : 'Renderizar como HTML Puro / Rich Text (clique para ativar)'}">
+                    🌐 HTML
+                  </button>
                   <!-- Up/Down arrows -->
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'up')" title="Mover para Cima">▲</button>
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'down')" title="Mover para Baixo">▼</button>
@@ -2459,6 +2463,23 @@
       }
       if (col) {
         col.useLabel = col.useLabel === false ? true : false;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function toggleDrawerColumnHtmlMode(colIdOrIdx) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      let col = null;
+      if (typeof colIdOrIdx === 'string') {
+        col = sec.columns.find(c => c.colId === colIdOrIdx);
+      } else {
+        col = sec.columns[colIdOrIdx];
+      }
+      if (col) {
+        col.renderAsHtml = !col.renderAsHtml;
+        logDebug(`Campo '${col.colId}' renderAsHtml setado para: ${col.renderAsHtml}`);
         renderDrawerColumns();
         updatePreview();
       }
@@ -2859,8 +2880,28 @@
       return num.toLocaleString('pt-BR');
     }
 
+    function extractInnerBodyHtml(htmlStr) {
+      if (typeof htmlStr !== 'string') return '';
+      let str = htmlStr.trim();
+      const bodyMatch = str.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      if (bodyMatch) {
+        str = bodyMatch[1];
+      }
+      str = str.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+               .replace(/<\/?(html|body)[^>]*>/gi, '');
+      return str.trim();
+    }
+
     function formatCellValue(val, type, colMeta = null) {
       if (val === undefined || val === null) return '';
+
+      // Check if value is Raw HTML / Rich Text (configured or auto-detected)
+      const isConfiguredHtml = colMeta && (colMeta.renderAsHtml === true || colMeta.isHtml === true);
+      const isAutoDetectedHtml = typeof val === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(val.trim());
+
+      if (isConfiguredHtml || isAutoDetectedHtml) {
+        return extractInnerBodyHtml(String(val));
+      }
 
       let formatted = '';
       if (colMeta && colMeta.refTargetCol) {
@@ -3730,6 +3771,7 @@
     window.onSectionLinkChange = onSectionLinkChange;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
+    window.toggleDrawerColumnHtmlMode = toggleDrawerColumnHtmlMode;
     window.toggleDrawerColumnGristStyle = toggleDrawerColumnGristStyle;
     window.onColumnDragStart = onColumnDragStart;
     window.onColumnDragOver = onColumnDragOver;
