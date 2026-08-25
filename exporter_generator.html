@@ -479,8 +479,9 @@
       padding: var(--field-padding, 2px 4px);
       margin-bottom: 3px;
       transition: all 0.2s ease;
-      background-color: #ffffff;
       cursor: pointer;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     .preview-field-container:hover {
       border-color: #3b82f6;
@@ -704,10 +705,11 @@
       border: none !important;
       padding: 0 !important;
       margin-bottom: 0 !important;
-      background-color: transparent !important;
       box-shadow: none !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     .exporting-pdf .preview-field-controls {
       display: none !important;
@@ -3556,24 +3558,26 @@
               const val = formatCellValue(cellVal, colMeta.type, colMeta);
               const align = colMeta.widgetOptions?.alignment || 'left';
               const condStyles = resolveCellConditionalStyles(row, colMeta);
-              const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor};` : (colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor};` : '');
-              const cellColor = condStyles.textColor ? `color: ${condStyles.textColor};` : (colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor};` : '');
-              const cellBold = condStyles.fontBold ? 'font-weight: bold;' : (colMeta.widgetOptions?.fontBold ? 'font-weight: bold;' : '');
-              const cellItalic = condStyles.fontItalic ? 'font-style: italic;' : (colMeta.widgetOptions?.fontItalic ? 'font-style: italic;' : '');
+              const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor} !important;` : (colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor} !important;` : '');
+              const cellColor = condStyles.textColor ? `color: ${condStyles.textColor} !important;` : (colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor} !important;` : '');
+              const cellBold = condStyles.fontBold ? 'font-weight: bold !important;' : (colMeta.widgetOptions?.fontBold ? 'font-weight: bold !important;' : '');
+              const cellItalic = condStyles.fontItalic ? 'font-style: italic !important;' : (colMeta.widgetOptions?.fontItalic ? 'font-style: italic !important;' : '');
               const colName = colMeta.customLabel || (colMeta.useLabel !== false ? colMeta.label : colMeta.colId);
+              const hasCondBg = Boolean(condStyles.fillColor || colMeta.widgetOptions?.fillColor);
 
               const isLast = idx === validCols.length - 1;
               const colBorderCss = (showColBorder && !isLast) ? 'border-right: 1px solid #cbd5e1; padding-right: 4px;' : '';
+              const condBoxCss = hasCondBg ? `padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important;` : '';
 
               return `
-                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss} ${cellBg} ${cellColor} ${condBoxCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${colMeta.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">${colName}</span>
-                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: ${hasCondBg ? (condStyles.textColor || 'inherit') : '#64748b'}; text-transform: uppercase; letter-spacing: 0.05em; display: block; opacity: 0.85;">${colName}</span>
+                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBold} ${cellItalic} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `;
             }).join('');
@@ -3602,12 +3606,13 @@
             const val = formatCellValue(cellVal, c.type, c);
             const align = c.widgetOptions?.alignment || 'left';
             const condStyles = resolveCellConditionalStyles(row, c);
-            const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor};` : (c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor};` : '');
-            const cellColor = condStyles.textColor ? `color: ${condStyles.textColor};` : (c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor};` : '');
-            const cellBold = condStyles.fontBold ? 'font-weight: bold;' : (c.widgetOptions?.fontBold ? 'font-weight: bold;' : '');
-            const cellItalic = condStyles.fontItalic ? 'font-style: italic;' : (c.widgetOptions?.fontItalic ? 'font-style: italic;' : '');
+            const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor} !important;` : (c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor} !important;` : '');
+            const cellColor = condStyles.textColor ? `color: ${condStyles.textColor} !important;` : (c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor} !important;` : '');
+            const cellBold = condStyles.fontBold ? 'font-weight: bold !important;' : (c.widgetOptions?.fontBold ? 'font-weight: bold !important;' : '');
+            const cellItalic = condStyles.fontItalic ? 'font-style: italic !important;' : (c.widgetOptions?.fontItalic ? 'font-style: italic !important;' : '');
             const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
             const isRawHtml = c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
+            const hasCondBg = Boolean(condStyles.fillColor || c.widgetOptions?.fillColor);
 
             let fieldBreakCss = '';
             if (c.pageBreak === 'page') {
@@ -3615,6 +3620,8 @@
             } else if (c.pageBreak === 'space') {
               fieldBreakCss = 'margin-top: 24px !important;';
             }
+
+            const condBoxCss = hasCondBg ? `padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important;` : '';
 
             if (isRawHtml) {
               const showLabel = c.useLabel === true;
@@ -3633,14 +3640,14 @@
               `);
             } else {
               innerContentBlocks.push(`
-                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px; ${fieldBreakCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px; ${fieldBreakCss} ${cellBg} ${cellColor} ${condBoxCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">${colName}</span>
-                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: ${hasCondBg ? (condStyles.textColor || 'inherit') : '#64748b'}; text-transform: uppercase; letter-spacing: 0.05em; display: block; opacity: 0.85;">${colName}</span>
+                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBold} ${cellItalic} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `);
             }
