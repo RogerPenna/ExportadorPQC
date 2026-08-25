@@ -592,9 +592,13 @@
         break-after: avoid !important;
         page-break-after: avoid !important;
       }
-      .pdf-record-card {
+      .preview-field-container {
         break-inside: avoid !important;
         page-break-inside: avoid !important;
+      }
+      .pdf-record-card {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
       }
       .preview-section-container.has-page-break {
         break-before: page !important;
@@ -3666,6 +3670,11 @@
     window.closePrintDrawer = closePrintDrawer;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
+    window.onSectionPageBreakChange = onSectionPageBreakChange;
+    window.onSectionColsLayoutChange = onSectionColsLayoutChange;
+    window.onSectionTitleChange = onSectionTitleChange;
+    window.onSectionMaxRecordsChange = onSectionMaxRecordsChange;
+    window.onSectionLinkChange = onSectionLinkChange;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
     window.toggleDrawerColumnGristStyle = toggleDrawerColumnGristStyle;
