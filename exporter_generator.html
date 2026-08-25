@@ -1468,6 +1468,8 @@
             label: c.label,
             useLabel: c.useLabel !== false,
             enabled: c.enabled === true,
+            renderAsHtml: c.renderAsHtml === true,
+            pageBreak: c.pageBreak || 'none',
             customLabel: c.customLabel || null,
             refTargetCol: c.refTargetCol || null,
             refTargetTable: c.refTargetTable || null
@@ -1703,6 +1705,8 @@
                   useLabel: saved.useLabel,
                   type: gristMeta.type,
                   enabled: saved.enabled,
+                  renderAsHtml: saved.renderAsHtml === true,
+                  pageBreak: saved.pageBreak || 'none',
                   customLabel: saved.customLabel || null,
                   refTargetCol: saved.refTargetCol || null,
                   refTargetTable: saved.refTargetTable || null,
@@ -2898,6 +2902,8 @@
             label: c.label,
             useLabel: c.useLabel !== false,
             enabled: c.enabled !== false,
+            renderAsHtml: c.renderAsHtml === true,
+            pageBreak: c.pageBreak || 'none',
             customLabel: c.customLabel || null,
             refTargetCol: c.refTargetCol || null
           })),
