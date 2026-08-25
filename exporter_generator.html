@@ -1930,6 +1930,15 @@
       }
     }
 
+    function onSectionStartPageChange(secId) {
+      const select = document.getElementById(`startpage-${secId}`);
+      const sec = findSectionById(reportSections, secId);
+      if (sec) {
+        sec.startNewPage = select.value;
+        updatePreview();
+      }
+    }
+
     function onSectionPageBreakChange(secId) {
       const select = document.getElementById(`pgbreak-${secId}`);
       const sec = findSectionById(reportSections, secId);
@@ -2585,13 +2594,23 @@
               </select>
             </div>
             <div class="form-group" style="flex:1;">
-              <label>Quebra de Página</label>
-              <select id="pgbreak-${sec.id}" onchange="onSectionPageBreakChange('${sec.id}')">
-                <option value="avoid" ${sec.pageBreak==='avoid'?'selected':''}>Evitar Corte</option>
-                <option value="always" ${sec.pageBreak==='always'?'selected':''}>1 Registro/Página</option>
-                <option value="none" ${sec.pageBreak==='none'?'selected':''}>Sem Controle</option>
+              <label>Início da Seção</label>
+              <select id="startpage-${sec.id}" onchange="onSectionStartPageChange('${sec.id}')">
+                <option value="always" ${(sec.startNewPage==='always' || (depth > 0 && sec.startNewPage !== 'auto')) ? 'selected' : ''}>Topo de Nova Página</option>
+                <option value="auto" ${(sec.startNewPage==='auto' || (depth === 0 && sec.startNewPage !== 'always')) ? 'selected' : ''}>Continuar na Página</option>
               </select>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label>Quebra dos Registros (Corte)</label>
+            <select id="pgbreak-${sec.id}" onchange="onSectionPageBreakChange('${sec.id}')">
+              <option value="smart_3_5" ${(sec.pageBreak==='smart_3_5' || !sec.pageBreak) ? 'selected' : ''}>Inteligente (Limite 3/5 - 60%)</option>
+              <option value="smart_4_5" ${sec.pageBreak==='smart_4_5' ? 'selected' : ''}>Inteligente (Limite 4/5 - 80%)</option>
+              <option value="avoid" ${sec.pageBreak==='avoid' ? 'selected' : ''}>Evitar Corte Total (Rígido)</option>
+              <option value="always" ${sec.pageBreak==='always' ? 'selected' : ''}>1 Registro por Página</option>
+              <option value="none" ${sec.pageBreak==='none' ? 'selected' : ''}>Sem Controle (Fluxo Livre)</option>
+            </select>
           </div>
 
           ${depth > 0 ? `
@@ -3048,7 +3067,17 @@
       
       const recordsHtml = cappedRecords.map((row, rIdx) => {
         const childrenHtml = sec.children.map(child => renderSectionRecordsHTML(child, row, sec.tableId)).join('');
-        const pageBreakClass = (sec.pageBreak === 'always' && rIdx > 0) ? ' page-break-before-record' : '';
+        
+        let pageBreakClass = '';
+        if (sec.pageBreak === 'always') {
+          pageBreakClass = rIdx > 0 ? ' page-break-before-record' : '';
+        } else if (sec.pageBreak === 'avoid') {
+          pageBreakClass = ' page-break-avoid-record';
+        } else if (sec.pageBreak === 'smart_3_5' || !sec.pageBreak) {
+          pageBreakClass = (rIdx > 0 && rIdx % 2 === 0) ? ' page-break-smart-35' : '';
+        } else if (sec.pageBreak === 'smart_4_5') {
+          pageBreakClass = (rIdx > 0 && rIdx % 3 === 0) ? ' page-break-smart-45' : '';
+        }
 
         syncLayoutItems(sec);
 
@@ -3162,7 +3191,8 @@
 
       const cappedNotice = isCapped ? `<div style="text-align:center; font-size:7.5pt; color:#94a3b8; padding:6px; border:1px dashed #cbd5e1; border-radius:6px; margin-top:4px;">⚠️ Pré-visualização da tabela '${sec.tableId}' limitada a ${maxRec} de ${filteredRecords.length} registros.</div>` : '';
       const isSubSection = parentRecord !== null;
-      const secPageBreakClass = isSubSection ? ' has-page-break' : '';
+      const startOnNewPage = (sec.startNewPage === 'always') || (isSubSection && sec.startNewPage !== 'auto');
+      const secPageBreakClass = startOnNewPage ? ' has-page-break' : '';
 
       return `
         <div class="preview-section-container${secPageBreakClass}" data-sec-id="${sec.id}">
@@ -3670,6 +3700,7 @@
     window.closePrintDrawer = closePrintDrawer;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
+    window.onSectionStartPageChange = onSectionStartPageChange;
     window.onSectionPageBreakChange = onSectionPageBreakChange;
     window.onSectionColsLayoutChange = onSectionColsLayoutChange;
     window.onSectionTitleChange = onSectionTitleChange;
