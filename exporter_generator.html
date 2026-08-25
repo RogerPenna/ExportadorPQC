@@ -970,6 +970,20 @@
     </div>
   </div>
 
+  <!-- Section Properties Drawer -->
+  <div id="section-props-drawer" class="columns-drawer">
+    <div class="drawer-header" style="background: var(--panel-bg); padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h2 id="section-props-title" style="font-size: 1.1rem; font-weight: 700; color: #fff; margin: 0;">⚙️ Propriedades da Seção</h2>
+        <p style="margin: 2px 0 0 0; font-size: 0.72rem; color: var(--text-muted);">Tabela, títulos, quebras de página A4 e filtros de ligação</p>
+      </div>
+      <button onclick="closeSectionPropsDrawer()" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer;">✕</button>
+    </div>
+    <div class="drawer-content" id="section-props-body" style="padding: 16px;">
+      <!-- Dynamic list of section properties -->
+    </div>
+  </div>
+
   <!-- Columns Configuration Drawer -->
   <div id="columns-drawer" class="columns-drawer">
     <div class="drawer-header">
@@ -1934,39 +1948,41 @@
     }
 
     async function onSectionTableChange(secId) {
-      const select = document.getElementById(`table-${secId}`);
+      const select = document.getElementById(`prop-table-${secId}`) || document.getElementById(`table-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (!sec) return;
+      if (!sec || !select) return;
 
       sec.tableId = select.value;
       sec.title = `Seção: ${select.value}`;
       await loadSectionColumnsAndData(sec);
       renderSectionsManager();
+      if (activePropsSectionId === secId) renderSectionPropsBody(sec);
       updatePreview();
     }
 
     function onSectionTitleChange(secId) {
-      const input = document.getElementById(`title-${secId}`);
+      const input = document.getElementById(`prop-title-${secId}`) || document.getElementById(`title-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && input) {
         sec.title = input.value;
+        renderSectionsManager();
         updatePreview();
       }
     }
 
     function onSectionLinkChange(secId) {
-      const select = document.getElementById(`link-${secId}`);
+      const select = document.getElementById(`prop-link-${secId}`) || document.getElementById(`link-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && select) {
         sec.linkColumn = select.value;
         updatePreview();
       }
     }
 
     function onSectionMaxRecordsChange(secId) {
-      const input = document.getElementById(`maxrec-${secId}`);
+      const input = document.getElementById(`prop-maxrec-${secId}`) || document.getElementById(`maxrec-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && input) {
         const val = parseInt(input.value, 10);
         sec.maxRecords = isNaN(val) || val < 0 ? 0 : val;
         updatePreview();
@@ -1974,27 +1990,27 @@
     }
 
     function onSectionColsLayoutChange(secId) {
-      const select = document.getElementById(`cols-${secId}`);
+      const select = document.getElementById(`prop-cols-${secId}`) || document.getElementById(`cols-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && select) {
         sec.colsLayout = parseInt(select.value, 10) || 1;
         updatePreview();
       }
     }
 
     function onSectionStartPageChange(secId) {
-      const select = document.getElementById(`startpage-${secId}`);
+      const select = document.getElementById(`prop-startpage-${secId}`) || document.getElementById(`startpage-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && select) {
         sec.startNewPage = select.value;
         updatePreview();
       }
     }
 
     function onSectionPageBreakChange(secId) {
-      const select = document.getElementById(`pgbreak-${secId}`);
+      const select = document.getElementById(`prop-pgbreak-${secId}`) || document.getElementById(`pgbreak-${secId}`);
       const sec = findSectionById(reportSections, secId);
-      if (sec) {
+      if (sec && select) {
         sec.pageBreak = select.value;
         updatePreview();
       }
@@ -2030,6 +2046,136 @@
     }
 
     let activeDrawerSectionId = null;
+    let activePropsSectionId = null;
+
+    function openSectionPropsDrawer(secId) {
+      activePropsSectionId = secId;
+      const sec = findSectionById(reportSections, secId);
+      if (!sec) return;
+
+      closeColumnsDrawer();
+      closePrintDrawer();
+
+      document.getElementById('section-props-title').innerText = `⚙️ ${sec.title || sec.tableId}`;
+      renderSectionPropsBody(sec);
+
+      document.getElementById('section-props-drawer').classList.add('open');
+      document.body.classList.add('drawer-open');
+    }
+
+    function closeSectionPropsDrawer() {
+      document.getElementById('section-props-drawer').classList.remove('open');
+      document.body.classList.remove('drawer-open');
+      activePropsSectionId = null;
+    }
+
+    function renderSectionPropsBody(sec) {
+      const container = document.getElementById('section-props-body');
+      if (!container) return;
+
+      const isSubSection = sec.parentTableId !== null;
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Tabela Grist</label>
+            <select id="prop-table-${sec.id}" onchange="onSectionTableChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+              ${gristTables.map(t => `<option value="${t.tableId}" ${t.tableId === sec.tableId ? 'selected' : ''}>${t.tableId}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Título da Seção</label>
+            <input type="text" id="prop-title-${sec.id}" value="${sec.title}" oninput="onSectionTitleChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+          </div>
+
+          <div class="form-group">
+            <label style="display:flex; justify-content:space-between; align-items:center; font-weight: 700; color: #fff;">
+              <span>Máx. Registros na Pré-visualização</span>
+              <span style="font-size:0.72rem; color: var(--text-muted); font-weight:normal;">(0 = ilimitado)</span>
+            </label>
+            <input type="number" id="prop-maxrec-${sec.id}" value="${sec.maxRecords !== undefined ? sec.maxRecords : (isSubSection ? 0 : 1)}" min="0" style="width:100px; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;" oninput="onSectionMaxRecordsChange('${sec.id}')">
+          </div>
+
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Colunas (Grid)</label>
+            <select id="prop-cols-${sec.id}" onchange="onSectionColsLayoutChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+              <option value="1" ${(sec.colsLayout||1)==1?'selected':''}>1 Coluna (Padrão)</option>
+              <option value="2" ${(sec.colsLayout||1)==2?'selected':''}>2 Colunas</option>
+              <option value="3" ${(sec.colsLayout||1)==3?'selected':''}>3 Colunas</option>
+              <option value="4" ${(sec.colsLayout||1)==4?'selected':''}>4 Colunas (ex: PDCA)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Início da Seção</label>
+            <select id="prop-startpage-${sec.id}" onchange="onSectionStartPageChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+              <option value="always" ${(sec.startNewPage==='always' || (isSubSection && sec.startNewPage !== 'auto')) ? 'selected' : ''}>Topo de Nova Página (A4)</option>
+              <option value="auto" ${(sec.startNewPage==='auto' || (!isSubSection && sec.startNewPage !== 'always')) ? 'selected' : ''}>Continuar na Página Atual</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Quebra dos Registros (Corte)</label>
+            <select id="prop-pgbreak-${sec.id}" onchange="onSectionPageBreakChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+              <option value="smart_3_5" ${(sec.pageBreak==='smart_3_5' || !sec.pageBreak) ? 'selected' : ''}>Inteligente (Limite 3/5 - 60%)</option>
+              <option value="smart_4_5" ${sec.pageBreak==='smart_4_5' ? 'selected' : ''}>Inteligente (Limite 4/5 - 80%)</option>
+              <option value="avoid" ${sec.pageBreak==='avoid' ? 'selected' : ''}>Evitar Corte Total (Rígido)</option>
+              <option value="always" ${sec.pageBreak==='always' ? 'selected' : ''}>1 Registro por Página</option>
+              <option value="none" ${sec.pageBreak==='none' ? 'selected' : ''}>Sem Controle (Fluxo Livre)</option>
+            </select>
+          </div>
+
+          ${isSubSection ? `
+            <div class="form-group">
+              <label style="font-weight: 700; color: #fff;">Coluna de Ligação ao Pai (Filtro)</label>
+              <select id="prop-link-${sec.id}" onchange="onSectionLinkChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+                <option value="">-- Sem filtro (mostrar tudo) --</option>
+                ${sec.columns.map(c => {
+                  const isRef = c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'));
+                  const targetTable = isRef ? (c.type.startsWith('Ref:') ? c.type.substring(4).trim() : c.type.substring(8).trim()) : '';
+                  const badge = isRef ? ` 🔗 [Link -> ${targetTable}]` : '';
+                  return `<option value="${c.colId}" ${c.colId === sec.linkColumn ? 'selected' : ''}>${c.label} (${c.colId})${badge}</option>`;
+                }).join('')}
+              </select>
+            </div>
+          ` : ''}
+
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <button class="btn-action" style="width: 100%; padding: 10px;" onclick="openColumnsDrawer('${sec.id}')">
+              📊 Configurar Colunas (${sec.columns.filter(c => c.enabled).length} ativas)
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function moveSection(secId, direction) {
+      function findAndSwap(sections) {
+        const index = sections.findIndex(s => s.id === secId);
+        if (index !== -1) {
+          const targetIndex = direction === 'up' ? index - 1 : index + 1;
+          if (targetIndex >= 0 && targetIndex < sections.length) {
+            const temp = sections[index];
+            sections[index] = sections[targetIndex];
+            sections[targetIndex] = temp;
+            return true;
+          }
+        }
+        for (const sec of sections) {
+          if (sec.children && sec.children.length > 0) {
+            if (findAndSwap(sec.children)) return true;
+          }
+        }
+        return false;
+      }
+
+      if (findAndSwap(reportSections)) {
+        logDebug(`Seção '${secId}' movida para ${direction}`);
+        renderSectionsManager();
+        updatePreview();
+      }
+    }
 
     function openColumnsDrawer(secId) {
       activeDrawerSectionId = secId;
@@ -2701,85 +2847,38 @@
     }
 
     function renderSectionCardHTML(sec, depth) {
-      const indent = depth * 16;
+      const indent = depth * 14;
+      const isSubSection = depth > 0;
+      const activeColCount = (sec.columns || []).filter(c => c.enabled).length;
+
       return `
-        <div class="section-card" style="margin-left: ${indent}px; border-left-color: ${depth > 0 ? 'var(--accent)' : 'var(--primary)'}">
-          <div class="section-card-header">
-            <span class="section-card-title">${depth === 0 ? 'Seção Principal' : 'Sub-seção de ' + (sec.parentTableId || (reportSections[0] ? reportSections[0].tableId : 'Pai'))}</span>
-            <div class="section-controls">
-              <button class="btn-icon" style="color: var(--primary)" onclick="addChildSection('${sec.id}')">+ Sub-seção</button>
-              <button class="btn-icon" style="color: var(--danger)" onclick="removeSection('${sec.id}')">✕</button>
+        <div class="section-card" style="margin-left: ${indent}px; padding: 8px 10px; margin-bottom: 6px; border-left: 3px solid ${depth > 0 ? 'var(--accent)' : 'var(--primary)'}; background: rgba(30, 41, 59, 0.7); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+            <!-- Left: Title & Table Badge -->
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1; overflow: hidden;" title="${sec.title} (${sec.tableId})">
+              <span style="font-size: 0.82rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-sec-card-title="${sec.id}">
+                ${sec.title || sec.tableId}
+              </span>
+              <span style="font-size: 0.68rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600;">
+                ${sec.tableId}
+              </span>
+              ${isSubSection ? `<span style="font-size:0.65rem; color:#94a3b8; font-weight:normal;">(Sub)</span>` : ''}
+            </div>
+
+            <!-- Right: Reorder Arrows & Action Buttons -->
+            <div style="display: flex; align-items: center; gap: 3px;">
+              <button class="preview-btn" onclick="moveSection('${sec.id}', 'up')" title="Mover Seção para Cima">▲</button>
+              <button class="preview-btn" onclick="moveSection('${sec.id}', 'down')" title="Mover Seção para Baixo">▼</button>
+              <button class="preview-btn" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: #3b82f6; font-size: 0.72rem; padding: 2px 6px;" onclick="openSectionPropsDrawer('${sec.id}')" title="Configurar Propriedades da Seção (Tabela, Título, Quebras A4, Filtros)">
+                ⚙️ Opções
+              </button>
+              <button class="preview-btn" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: #a855f7; font-size: 0.72rem; padding: 2px 6px;" onclick="openColumnsDrawer('${sec.id}')" title="Configurar Colunas (${activeColCount} ativas)">
+                📊 Colunas (${activeColCount})
+              </button>
+              <button class="btn-icon" style="color: var(--primary); font-size: 0.78rem; padding: 2px 4px;" onclick="addChildSection('${sec.id}')" title="Adicionar Sub-seção Filha">+ Sub</button>
+              <button class="btn-icon" style="color: var(--danger); font-size: 0.78rem; padding: 2px 4px;" onclick="removeSection('${sec.id}')" title="Excluir Seção">✕</button>
             </div>
           </div>
-
-          <div class="form-group">
-            <label>Tabela Grist</label>
-            <select id="table-${sec.id}" onchange="onSectionTableChange('${sec.id}')">
-              ${gristTables.map(t => `<option value="${t.tableId}" ${t.tableId === sec.tableId ? 'selected' : ''}>${t.tableId}</option>`).join('')}
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Título da Seção</label>
-            <input type="text" id="title-${sec.id}" value="${sec.title}" oninput="onSectionTitleChange('${sec.id}')">
-          </div>
-
-          <div class="form-group">
-            <label style="display:flex; justify-content:space-between; align-items:center;">
-              <span>Máx. Registros na Pré-visualização</span>
-              <span style="font-size:0.72rem; color: var(--text-muted); font-weight:normal;">(0 = ilimitado)</span>
-            </label>
-            <input type="number" id="maxrec-${sec.id}" value="${sec.maxRecords !== undefined ? sec.maxRecords : (depth === 0 ? 1 : 0)}" min="0" style="width:80px;" oninput="onSectionMaxRecordsChange('${sec.id}')">
-          </div>
-
-          <div style="display:flex; gap:8px;">
-            <div class="form-group" style="flex:1;">
-              <label>Colunas (Grid)</label>
-              <select id="cols-${sec.id}" onchange="onSectionColsLayoutChange('${sec.id}')">
-                <option value="1" ${(sec.colsLayout||1)==1?'selected':''}>1 Coluna (Padrão)</option>
-                <option value="2" ${(sec.colsLayout||1)==2?'selected':''}>2 Colunas</option>
-                <option value="3" ${(sec.colsLayout||1)==3?'selected':''}>3 Colunas</option>
-                <option value="4" ${(sec.colsLayout||1)==4?'selected':''}>4 Colunas (ex: PDCA)</option>
-              </select>
-            </div>
-            <div class="form-group" style="flex:1;">
-              <label>Início da Seção</label>
-              <select id="startpage-${sec.id}" onchange="onSectionStartPageChange('${sec.id}')">
-                <option value="always" ${(sec.startNewPage==='always' || (depth > 0 && sec.startNewPage !== 'auto')) ? 'selected' : ''}>Topo de Nova Página</option>
-                <option value="auto" ${(sec.startNewPage==='auto' || (depth === 0 && sec.startNewPage !== 'always')) ? 'selected' : ''}>Continuar na Página</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Quebra dos Registros (Corte)</label>
-            <select id="pgbreak-${sec.id}" onchange="onSectionPageBreakChange('${sec.id}')">
-              <option value="smart_3_5" ${(sec.pageBreak==='smart_3_5' || !sec.pageBreak) ? 'selected' : ''}>Inteligente (Limite 3/5 - 60%)</option>
-              <option value="smart_4_5" ${sec.pageBreak==='smart_4_5' ? 'selected' : ''}>Inteligente (Limite 4/5 - 80%)</option>
-              <option value="avoid" ${sec.pageBreak==='avoid' ? 'selected' : ''}>Evitar Corte Total (Rígido)</option>
-              <option value="always" ${sec.pageBreak==='always' ? 'selected' : ''}>1 Registro por Página</option>
-              <option value="none" ${sec.pageBreak==='none' ? 'selected' : ''}>Sem Controle (Fluxo Livre)</option>
-            </select>
-          </div>
-
-          ${depth > 0 ? `
-            <div class="form-group">
-              <label>Coluna de Ligação ao Pai (Filtro)</label>
-              <select id="link-${sec.id}" onchange="onSectionLinkChange('${sec.id}')">
-                <option value="">-- Sem filtro (mostrar tudo) --</option>
-                ${sec.columns.map(c => {
-                  const isRef = c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'));
-                  const targetTable = isRef ? (c.type.startsWith('Ref:') ? c.type.substring(4).trim() : c.type.substring(8).trim()) : '';
-                  const badge = isRef ? ` 🔗 [Link -> ${targetTable}]` : '';
-                  return `<option value="${c.colId}" ${c.colId === sec.linkColumn ? 'selected' : ''}>${c.label} (${c.colId})${badge}</option>`;
-                }).join('')}
-              </select>
-            </div>
-          ` : ''}
-
-          <button class="btn-action btn-outline" style="width: 100%; margin-top: 10px; font-size: 0.8rem; padding: 8px;" onclick="openColumnsDrawer('${sec.id}')">
-            ⚙ Configurar Colunas (${sec.columns.filter(c => c.enabled).length} selecionadas)
-          </button>
         </div>
         ${sec.children.map(child => renderSectionCardHTML(child, depth + 1)).join('')}
       `;
@@ -3918,6 +4017,9 @@
     window.closePrintDrawer = closePrintDrawer;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
+    window.openSectionPropsDrawer = openSectionPropsDrawer;
+    window.closeSectionPropsDrawer = closeSectionPropsDrawer;
+    window.moveSection = moveSection;
     window.togglePreviewPause = togglePreviewPause;
     window.enableAllDrawerColumns = enableAllDrawerColumns;
     window.invertDrawerColumnsSelection = invertDrawerColumnsSelection;
