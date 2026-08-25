@@ -1847,10 +1847,13 @@
       const existingColMap = new Map((section.columns || []).map(c => [c.colId, c]));
 
       let rawCols = [];
+      let cleanColsMap = {};
       try {
-        const schema = await tableLens.getTableSchema(tableId, { mode: 'raw' });
-        rawCols = Object.values(schema);
-        logDebug(`GristTableLens schema para ${tableId}: encontrou ${rawCols.length} colunas`);
+        const rawSchema = await tableLens.getTableSchema(tableId, { mode: 'raw' });
+        const cleanSchema = await tableLens.getTableSchema(tableId, { mode: 'clean' });
+        rawCols = Object.values(rawSchema || {});
+        cleanColsMap = cleanSchema || {};
+        logDebug(`GristTableLens schema para ${tableId}: encontrou ${rawCols.length} colunas com regras de formatação condicional`);
       } catch (err) {
         logDebug(`Erro ao ler schema de ${tableId} via TableLens: ${err.message}`);
       }
@@ -1866,16 +1869,20 @@
         for (const existing of (existingColMap.size > 0 ? [...existingColMap.values()] : [])) {
           const gristMeta = gristMetaMap.get(existing.colId);
           if (gristMeta) {
+            const cleanMeta = cleanColsMap[existing.colId];
             orderedCols.push({
               colId: existing.colId,
               label: (gristMeta.label !== undefined && gristMeta.label !== null) ? gristMeta.label : existing.colId,
               useLabel: existing.useLabel,
               type: gristMeta.type,
               enabled: existing.enabled,
+              renderAsHtml: existing.renderAsHtml === true,
+              pageBreak: existing.pageBreak || 'none',
               customLabel: existing.customLabel || null,
               refTargetCol: existing.refTargetCol || null,
               refTargetTable: existing.refTargetTable || null,
               groupId: existing.groupId || null,
+              conditionalFormattingRules: cleanMeta?.conditionalFormattingRules || [],
               widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
             });
             gristMetaMap.delete(existing.colId);
@@ -1883,12 +1890,14 @@
         }
 
         for (const [colId, gristMeta] of gristMetaMap.entries()) {
+          const cleanMeta = cleanColsMap[colId];
           orderedCols.push({
             colId: colId,
             label: (gristMeta.label !== undefined && gristMeta.label !== null) ? gristMeta.label : colId,
             useLabel: true,
             type: gristMeta.type,
             enabled: true,
+            conditionalFormattingRules: cleanMeta?.conditionalFormattingRules || [],
             widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
           });
         }
@@ -2992,6 +3001,65 @@
       document.getElementById('json-config').value = JSON.stringify(configJson, null, 2);
     }
 
+    function evaluateGristRuleFormula(formula, row, colId) {
+      if (!formula || typeof formula !== 'string') return false;
+      try {
+        let expr = formula.replace(/\$([A-Za-z0-9_]+)/g, (match, p1) => {
+          let val = row[p1];
+          if (val === undefined || val === null) val = 0;
+          if (typeof val === 'number') return String(val);
+          if (typeof val === 'string') {
+            const num = parseFloat(val.replace(',', '.'));
+            return !isNaN(num) ? String(num) : JSON.stringify(val);
+          }
+          return JSON.stringify(val);
+        });
+
+        expr = expr.replace(/\band\b/gi, '&&')
+                   .replace(/\bor\b/gi, '||')
+                   .replace(/\bnot\b/gi, '!');
+
+        return Boolean(new Function(`return (${expr});`)());
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function resolveCellConditionalStyles(row, colMeta) {
+      const styles = {
+        fillColor: null,
+        textColor: null,
+        fontBold: false,
+        fontItalic: false
+      };
+
+      if (!colMeta || !row) return styles;
+
+      if (Array.isArray(colMeta.conditionalFormattingRules) && colMeta.conditionalFormattingRules.length > 0) {
+        for (const rule of colMeta.conditionalFormattingRules) {
+          let isMatch = false;
+
+          if (rule.helperColumnId && row[rule.helperColumnId] !== undefined) {
+            if (row[rule.helperColumnId] === true || row[rule.helperColumnId] === 1) {
+              isMatch = true;
+            }
+          } else if (rule.conditionFormula) {
+            isMatch = evaluateGristRuleFormula(rule.conditionFormula, row, colMeta.colId);
+          }
+
+          if (isMatch && rule.style) {
+            styles.fillColor = rule.style.fillColor || rule.style.bgColor || rule.style.background || null;
+            styles.textColor = rule.style.textColor || rule.style.color || null;
+            styles.fontBold = rule.style.fontBold === true;
+            styles.fontItalic = rule.style.fontItalic === true;
+            break;
+          }
+        }
+      }
+
+      return styles;
+    }
+
     function formatChoiceValue(valStr, colMeta = null) {
       if (valStr === undefined || valStr === null || valStr === '') return '';
 
@@ -3354,10 +3422,11 @@
 
               const val = formatCellValue(cellVal, colMeta.type, colMeta);
               const align = colMeta.widgetOptions?.alignment || 'left';
-              const cellBg = colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor}` : '';
-              const cellColor = colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor}` : '';
-              const cellBold = colMeta.widgetOptions?.fontBold ? 'font-weight: bold' : '';
-              const cellItalic = colMeta.widgetOptions?.fontItalic ? 'font-style: italic' : '';
+              const condStyles = resolveCellConditionalStyles(row, colMeta);
+              const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor};` : (colMeta.widgetOptions?.fillColor ? `background-color: ${colMeta.widgetOptions.fillColor};` : '');
+              const cellColor = condStyles.textColor ? `color: ${condStyles.textColor};` : (colMeta.widgetOptions?.textColor ? `color: ${colMeta.widgetOptions.textColor};` : '');
+              const cellBold = condStyles.fontBold ? 'font-weight: bold;' : (colMeta.widgetOptions?.fontBold ? 'font-weight: bold;' : '');
+              const cellItalic = condStyles.fontItalic ? 'font-style: italic;' : (colMeta.widgetOptions?.fontItalic ? 'font-style: italic;' : '');
               const colName = colMeta.customLabel || (colMeta.useLabel !== false ? colMeta.label : colMeta.colId);
 
               const isLast = idx === validCols.length - 1;
@@ -3399,10 +3468,11 @@
 
             const val = formatCellValue(cellVal, c.type, c);
             const align = c.widgetOptions?.alignment || 'left';
-            const cellBg = c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor}` : '';
-            const cellColor = c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor}` : '';
-            const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
-            const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
+            const condStyles = resolveCellConditionalStyles(row, c);
+            const cellBg = condStyles.fillColor ? `background-color: ${condStyles.fillColor};` : (c.widgetOptions?.fillColor ? `background-color: ${c.widgetOptions.fillColor};` : '');
+            const cellColor = condStyles.textColor ? `color: ${condStyles.textColor};` : (c.widgetOptions?.textColor ? `color: ${c.widgetOptions.textColor};` : '');
+            const cellBold = condStyles.fontBold ? 'font-weight: bold;' : (c.widgetOptions?.fontBold ? 'font-weight: bold;' : '');
+            const cellItalic = condStyles.fontItalic ? 'font-style: italic;' : (c.widgetOptions?.fontItalic ? 'font-style: italic;' : '');
             const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
             const isRawHtml = c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
 
