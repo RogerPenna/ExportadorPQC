@@ -2490,17 +2490,31 @@
         parentForRoot = activeGristRecord;
       }
       
-      const rootSec = reportSections[0];
+      // Collect IDs of all sections that are nested as children
+      const childSectionIds = new Set();
+      const collectChildIds = (sections) => {
+        sections.forEach(s => {
+          (s.children || []).forEach(child => {
+            childSectionIds.add(child.id);
+            collectChildIds(child.children || []);
+          });
+        });
+      };
+      collectChildIds(reportSections);
+
+      // Top-level root sections are only those that are NOT children of any other section
+      const topLevelSections = reportSections.filter(sec => !childSectionIds.has(sec.id));
+
+      const rootSec = topLevelSections[0];
       if (!rootSec) {
         pdfContent.innerHTML = '';
         return;
       }
 
-      pdfContent.innerHTML = reportSections.map((sec, idx) => {
+      pdfContent.innerHTML = topLevelSections.map((sec, idx) => {
         if (idx === 0) {
           return renderSectionRecordsHTML(sec, parentForRoot);
         } else {
-          // If secondary section is placed at root level, filter it against the primary root record
           const primaryRecord = (rootSec.records && rootSec.records.length > 0) ? rootSec.records[0] : parentForRoot;
           return renderSectionRecordsHTML(sec, primaryRecord, rootSec.tableId);
         }
