@@ -2489,7 +2489,22 @@
       if (currentTableId !== 'Exportador') {
         parentForRoot = activeGristRecord;
       }
-      pdfContent.innerHTML = reportSections.map(sec => renderSectionRecordsHTML(sec, parentForRoot)).join('');
+      
+      const rootSec = reportSections[0];
+      if (!rootSec) {
+        pdfContent.innerHTML = '';
+        return;
+      }
+
+      pdfContent.innerHTML = reportSections.map((sec, idx) => {
+        if (idx === 0) {
+          return renderSectionRecordsHTML(sec, parentForRoot);
+        } else {
+          // If secondary section is placed at root level, filter it against the primary root record
+          const primaryRecord = (rootSec.records && rootSec.records.length > 0) ? rootSec.records[0] : parentForRoot;
+          return renderSectionRecordsHTML(sec, primaryRecord, rootSec.tableId);
+        }
+      }).join('');
 
       // Build JSON configuration structure
       const buildConfigJson = (sections) => {
