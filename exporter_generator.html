@@ -831,6 +831,9 @@
     </div>
 
     <div class="panel-footer" style="display: flex; flex-direction: column; gap: 8px;">
+      <button id="toggle-preview-pause-btn" onclick="togglePreviewPause()" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 7px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;" title="Pausar atualizações da prévia para fazer edições rápidas sem lentidão">
+        <span id="preview-pause-icon">▶️</span> <span id="preview-pause-text">Live Preview: Ativo (Clique p/ Pausar)</span>
+      </button>
       <button class="btn-action" onclick="openPrintDrawer()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.3);" title="Abrir painel de impressão e métricas do PDF">
         <span>🖨️ Imprimir & Opções de PDF</span>
       </button>
@@ -2047,9 +2050,14 @@
 
       let html = `
         <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <button class="btn-action btn-outline" style="flex: 1; font-size: 0.72rem; padding: 5px 6px;" onclick="enableAllDrawerColumns(true)" title="Marcar todas as colunas como visíveis">✅ Marcar Todos</button>
+            <button class="btn-action btn-outline" style="flex: 1; font-size: 0.72rem; padding: 5px 6px;" onclick="enableAllDrawerColumns(false)" title="Desmarcar todas as colunas (ideal para selecionar 1 só)">❌ Desmarcar Todos</button>
+            <button class="btn-action btn-outline" style="flex: 1; font-size: 0.72rem; padding: 5px 6px;" onclick="invertDrawerColumnsSelection()" title="Inverter seleção de visibilidade">🔄 Inverter</button>
+          </div>
           <button class="btn-action" style="width: 100%; font-size: 0.78rem; padding: 7px 10px;" onclick="createColumnGroup()">+ Criar Grupo de Colunas Lado a Lado</button>
           <p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px; margin-bottom: 0;">
-            Reordene linhas e grupos abaixo. Adicione colunas aos grupos para exibi-las em paralelo (ex: 4 colunas de 25% para o PDCA).
+            Reordene linhas e grupos abaixo. Adicione colunas aos grupos para exibi-las em paralelo.
           </p>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -2468,6 +2476,50 @@
       }
     }
 
+    let isPreviewPaused = false;
+
+    function togglePreviewPause() {
+      isPreviewPaused = !isPreviewPaused;
+      const btn = document.getElementById('toggle-preview-pause-btn');
+      const icon = document.getElementById('preview-pause-icon');
+      const text = document.getElementById('preview-pause-text');
+
+      if (isPreviewPaused) {
+        if (btn) { btn.style.background = '#451a03'; btn.style.borderColor = '#b45309'; btn.style.color = '#f59e0b'; }
+        if (icon) icon.innerText = '⏸️';
+        if (text) text.innerText = 'Live Preview: Pausado';
+        logDebug("[INFO] Live Preview PAUSADO. As alterações no painel não renderizarão a prévia até ser reativado.");
+      } else {
+        if (btn) { btn.style.background = '#1e293b'; btn.style.borderColor = '#334155'; btn.style.color = '#94a3b8'; }
+        if (icon) icon.innerText = '▶️';
+        if (text) text.innerText = 'Live Preview: Ativo';
+        logDebug("[INFO] Live Preview REATIVADO. Renderizando atualizações...");
+        updatePreview();
+      }
+    }
+
+    function enableAllDrawerColumns(enableState) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      sec.columns.forEach(c => {
+        c.enabled = enableState;
+      });
+      logDebug(`Todas as colunas da seção '${sec.title}' setadas para visível = ${enableState}`);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
+    function invertDrawerColumnsSelection() {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      sec.columns.forEach(c => {
+        c.enabled = c.enabled === false ? true : false;
+      });
+      logDebug(`Visibilidade das colunas da seção '${sec.title}' invertida.`);
+      renderDrawerColumns();
+      updatePreview();
+    }
+
     function toggleDrawerColumnHtmlMode(colIdOrIdx) {
       const sec = findSectionById(reportSections, activeDrawerSectionId);
       if (!sec) return;
@@ -2670,6 +2722,7 @@
     }
 
     function updatePreview() {
+      if (isPreviewPaused) return;
       const title = document.getElementById('report-title-input').value;
       const subtitle = document.getElementById('report-subtitle-input').value;
       const themeColor = document.getElementById('theme-color-input').value;
@@ -3763,6 +3816,9 @@
     window.closePrintDrawer = closePrintDrawer;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
+    window.togglePreviewPause = togglePreviewPause;
+    window.enableAllDrawerColumns = enableAllDrawerColumns;
+    window.invertDrawerColumnsSelection = invertDrawerColumnsSelection;
     window.onSectionStartPageChange = onSectionStartPageChange;
     window.onSectionPageBreakChange = onSectionPageBreakChange;
     window.onSectionColsLayoutChange = onSectionColsLayoutChange;
