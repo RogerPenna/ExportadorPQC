@@ -984,6 +984,29 @@
     </div>
   </div>
 
+  <!-- Debug Conditional Formatting Modal -->
+  <div id="debug-cf-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 99999; align-items: center; justify-content: center; padding: 20px;">
+    <div style="background: #1e293b; border: 1px solid #475569; border-radius: 10px; width: 100%; max-width: 650px; padding: 20px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+          🔬 Diagnóstico de Formatação Condicional Grist
+        </h3>
+        <button onclick="closeDebugCfModal()" style="background: none; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer;">✕</button>
+      </div>
+
+      <textarea id="debug-cf-text" readonly style="width: 100%; height: 320px; font-family: 'Fira Code', 'Consolas', monospace; background: #0f172a; color: #38bdf8; padding: 12px; border-radius: 6px; border: 1px solid #334155; font-size: 0.8rem; line-height: 1.4; resize: vertical; user-select: text; -webkit-user-select: text; outline: none;"></textarea>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px;">
+        <button class="btn-action" id="copy-debug-cf-btn" style="padding: 8px 16px; font-size: 0.85rem;" onclick="copyDebugCfText()">
+          📋 Copiar Diagnóstico
+        </button>
+        <button class="btn-action btn-outline" style="padding: 8px 16px; font-size: 0.85rem;" onclick="closeDebugCfModal()">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Columns Configuration Drawer -->
   <div id="columns-drawer" class="columns-drawer">
     <div class="drawer-header">
@@ -3118,9 +3141,8 @@
       report += `Chaves do Registro 1: ${Object.keys(sampleRow).join(', ')}\n\n`;
 
       Object.values(schema).forEach(c => {
+        report += `[Coluna ${c.colId}] label="${c.label}" rulesCount=${(c.conditionalFormattingRules||[]).length}\n`;
         if (c.conditionalFormattingRules && c.conditionalFormattingRules.length > 0) {
-          report += `Coluna: ${c.colId} (${c.label})\n`;
-          report += `Rules em Metadados (${c.conditionalFormattingRules.length}):\n`;
           c.conditionalFormattingRules.forEach((r, idx) => {
             report += `  - Regra #${idx + 1}: Helper=${r.helperColumnId || 'none'} | Formula="${r.conditionFormula || 'none'}" | Style=${JSON.stringify(r.style)}\n`;
           });
@@ -3129,13 +3151,38 @@
         }
       });
 
-      if (!report.includes('Rules em Metadados')) {
-        report += `Nenhuma regra de formatação condicional detectada nos metadados da tabela '${sec.tableId}'.\n`;
-        report += `Verifique se as regras foram criadas no painel 'Estilo de Célula' do Grist.\n`;
+      const modal = document.getElementById('debug-cf-modal');
+      const textEl = document.getElementById('debug-cf-text');
+      if (modal && textEl) {
+        textEl.value = report;
+        modal.style.display = 'flex';
+      } else {
+        alert(report);
       }
-
-      alert(report);
       console.log(report);
+    }
+
+    function closeDebugCfModal() {
+      const modal = document.getElementById('debug-cf-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function copyDebugCfText() {
+      const textEl = document.getElementById('debug-cf-text');
+      const btn = document.getElementById('copy-debug-cf-btn');
+      if (textEl) {
+        textEl.select();
+        navigator.clipboard.writeText(textEl.value).then(() => {
+          if (btn) {
+            const orig = btn.innerText;
+            btn.innerText = '✅ Copiado!';
+            setTimeout(() => btn.innerText = orig, 2000);
+          }
+        }).catch(err => {
+          document.execCommand('copy');
+          if (btn) btn.innerText = '✅ Copiado!';
+        });
+      }
     }
 
     function formatChoiceValue(valStr, colMeta = null) {
@@ -4150,6 +4197,8 @@
     window.onSectionLinkChange = onSectionLinkChange;
     window.onSectionRecHeaderChange = onSectionRecHeaderChange;
     window.debugConditionalFormatting = debugConditionalFormatting;
+    window.closeDebugCfModal = closeDebugCfModal;
+    window.copyDebugCfText = copyDebugCfText;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
     window.toggleDrawerColumnHtmlMode = toggleDrawerColumnHtmlMode;
