@@ -3106,14 +3106,13 @@
         for (const rule of rules) {
           let isMatch = false;
 
+          // 1. If Grist provided helper column boolean in row data, use Grist's exact result!
           if (rule.helperColumnId && row[rule.helperColumnId] !== undefined) {
-            if (row[rule.helperColumnId] === true || row[rule.helperColumnId] === 1) {
-              isMatch = true;
-            }
-          }
-          
-          if (!isMatch && rule.conditionFormula) {
-            isMatch = evaluateGristRuleFormula(rule.conditionFormula, row, colMeta.colId);
+            isMatch = Boolean(row[rule.helperColumnId]);
+          } 
+          // 2. Fallback to JS formula evaluation ONLY if helper column is absent in row data
+          else if (rule.conditionFormula) {
+            isMatch = evaluateGristRuleFormula(rule.conditionFormula.trim(), row, colMeta.colId);
           }
 
           if (isMatch && rule.style) {
@@ -3144,7 +3143,8 @@
         report += `[Coluna ${c.colId}] label="${c.label}" rulesCount=${(c.conditionalFormattingRules||[]).length}\n`;
         if (c.conditionalFormattingRules && c.conditionalFormattingRules.length > 0) {
           c.conditionalFormattingRules.forEach((r, idx) => {
-            report += `  - Regra #${idx + 1}: Helper=${r.helperColumnId || 'none'} | Formula="${r.conditionFormula || 'none'}" | Style=${JSON.stringify(r.style)}\n`;
+            const hVal = r.helperColumnId ? sampleRow[r.helperColumnId] : 'n/a';
+            report += `  - Regra #${idx + 1}: Helper=${r.helperColumnId || 'none'} (val=${hVal}) | Formula="${(r.conditionFormula || '').trim()}" | Style=${JSON.stringify(r.style)}\n`;
           });
           const resolved = resolveCellConditionalStyles(sampleRow, c);
           report += `  -> Estilo Resultante para Registro 1: ${JSON.stringify(resolved)}\n\n`;
