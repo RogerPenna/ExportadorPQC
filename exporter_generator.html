@@ -3099,10 +3099,10 @@
       }
     }
 
-    function getHelperRuleNum(hId) {
-      if (!hId) return 999;
-      const m = String(hId).match(/\d+$/);
-      return m ? parseInt(m[0], 10) : 1;
+    function extractFormulaLimit(formula) {
+      if (!formula || typeof formula !== 'string') return 999999;
+      const match = formula.match(/(?:<=|<|==)\s*(-?\d+(?:\.\d+)?)/);
+      return match ? parseFloat(match[1]) : 999999;
     }
 
     function resolveCellConditionalStyles(row, colMeta) {
@@ -3116,30 +3116,37 @@
       if (!colMeta || !row) return styles;
 
       const rawRules = colMeta.conditionalFormattingRules || [];
+      if (!Array.isArray(rawRules) || rawRules.length === 0) return styles;
 
-      if (Array.isArray(rawRules) && rawRules.length > 0) {
-        const rules = [...rawRules].sort((a, b) => getHelperRuleNum(a.helperColumnId) - getHelperRuleNum(b.helperColumnId));
+      const matchingRules = [];
 
-        for (const rule of rules) {
-          let isMatch = false;
+      for (const rule of rawRules) {
+        let isMatch = false;
 
-          // 1. If Grist provided helper column boolean in row data, use Grist's exact result!
-          if (rule.helperColumnId && row[rule.helperColumnId] !== undefined) {
-            isMatch = Boolean(row[rule.helperColumnId]);
-          } 
-          // 2. Fallback to JS formula evaluation ONLY if helper column is absent in row data
-          else if (rule.conditionFormula) {
-            isMatch = evaluateGristRuleFormula(rule.conditionFormula.trim(), row, colMeta.colId);
-          }
-
-          if (isMatch && rule.style) {
-            styles.fillColor = rule.style.fillColor || rule.style.bgColor || rule.style.background || null;
-            styles.textColor = rule.style.textColor || rule.style.color || null;
-            styles.fontBold = rule.style.fontBold === true;
-            styles.fontItalic = rule.style.fontItalic === true;
-            break;
-          }
+        // 1. If Grist provided helper column boolean in row data, use Grist's exact result!
+        if (rule.helperColumnId && row[rule.helperColumnId] !== undefined) {
+          isMatch = Boolean(row[rule.helperColumnId]);
+        } 
+        // 2. Fallback to JS formula evaluation ONLY if helper column is absent in row data
+        else if (rule.conditionFormula) {
+          isMatch = evaluateGristRuleFormula(rule.conditionFormula.trim(), row, colMeta.colId);
         }
+
+        if (isMatch && rule.style) {
+          const limit = extractFormulaLimit(rule.conditionFormula);
+          matchingRules.push({ rule, limit });
+        }
+      }
+
+      if (matchingRules.length > 0) {
+        // Sort matching rules by numeric limit ascending: the rule with the smallest limit (e.g. < 50 vs <= 100) is the most specific winner!
+        matchingRules.sort((a, b) => a.limit - b.limit);
+        const winningRule = matchingRules[0].rule;
+
+        styles.fillColor = winningRule.style.fillColor || winningRule.style.bgColor || winningRule.style.background || null;
+        styles.textColor = winningRule.style.textColor || winningRule.style.color || null;
+        styles.fontBold = winningRule.style.fontBold === true;
+        styles.fontItalic = winningRule.style.fontItalic === true;
       }
 
       return styles;
@@ -3574,17 +3581,17 @@
 
               const isLast = idx === validCols.length - 1;
               const colBorderCss = (showColBorder && !isLast) ? 'border-right: 1px solid #cbd5e1; padding-right: 4px;' : '';
-              const condBoxCss = hasCondBg ? `padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important;` : '';
+              const condBoxCss = hasCondBg ? `padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important; font-weight: 600; width: 100%; box-sizing: border-border-box;` : '';
 
               return `
-                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss} ${cellBg} ${cellColor} ${condBoxCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${colMeta.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: ${hasCondBg ? (condStyles.textColor || 'inherit') : '#64748b'}; text-transform: uppercase; letter-spacing: 0.05em; display: block; opacity: 0.85;">${colName}</span>
-                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBold} ${cellItalic} display: inline-block; line-height: 1.4;">${val}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px;">${colName}</span>
+                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg} ${cellColor} ${cellBold} ${cellItalic} ${condBoxCss} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `;
             }).join('');
@@ -3628,7 +3635,7 @@
               fieldBreakCss = 'margin-top: 24px !important;';
             }
 
-            const condBoxCss = hasCondBg ? `padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important;` : '';
+            const condBoxCss = hasCondBg ? `padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important; font-weight: 600; width: 100%; box-sizing: border-box;` : '';
 
             if (isRawHtml) {
               const showLabel = c.useLabel === true;
@@ -3647,14 +3654,14 @@
               `);
             } else {
               innerContentBlocks.push(`
-                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px; ${fieldBreakCss} ${cellBg} ${cellColor} ${condBoxCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px; ${fieldBreakCss}" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: ${hasCondBg ? (condStyles.textColor || 'inherit') : '#64748b'}; text-transform: uppercase; letter-spacing: 0.05em; display: block; opacity: 0.85;">${colName}</span>
-                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBold} ${cellItalic} display: inline-block; line-height: 1.4;">${val}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px;">${colName}</span>
+                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg} ${cellColor} ${cellBold} ${cellItalic} ${condBoxCss} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `);
             }
