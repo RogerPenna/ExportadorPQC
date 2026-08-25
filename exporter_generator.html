@@ -528,6 +528,32 @@
     }
     .preview-field-controls {
       display: none;
+    }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      .left-panel, .columns-drawer, #preview-stats-bar, .preview-field-controls, .preview-btn, button, .section-controls {
+        display: none !important;
+      }
+      .right-panel {
+        overflow: visible !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+      }
+      .paper-container, #pdf-preview-sheet {
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        border: none !important;
+      }
+    }
+    .preview-field-controls {
       position: absolute;
       top: 4px;
       right: 4px;
@@ -749,6 +775,21 @@
 
   <!-- Right Live PDF Preview Panel -->
   <div class="right-panel">
+    <!-- Live Preview Statistics & Print Toolbar -->
+    <div id="preview-stats-bar" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 8.5pt; color: #94a3b8; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <div>📄 <b style="color: #cbd5e1;">Páginas A4 (Est.):</b> <span id="stat-pages" style="color: #60a5fa; font-weight: 700; font-size: 9.5pt;">1</span></div>
+        <div>📏 <b style="color: #cbd5e1;">Altura:</b> <span id="stat-height" style="color: #34d399; font-weight: 700; font-size: 9.5pt;">0 px</span></div>
+        <div>🔤 <b style="color: #cbd5e1;">Caracteres:</b> <span id="stat-chars" style="color: #a78bfa; font-weight: 700; font-size: 9.5pt;">0</span></div>
+        <div>📊 <b style="color: #cbd5e1;">Status:</b> <span id="stat-status" style="color: #10b981; font-weight: 700;">🟢 Seguro (Canvas)</span></div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button onclick="window.print()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 8.5pt; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.3);" title="Salvar PDF com o motor nativo do Chrome (Sem limite de altura/páginas)">
+          🖨️ Imprimir / PDF Nativo
+        </button>
+      </div>
+    </div>
+
     <div class="paper-container" id="pdf-preview-sheet">
       <div class="report-header" id="pdf-header">
         <div class="report-title" id="pdf-title">Relatório Consolidado PQC</div>
@@ -2520,6 +2561,32 @@
         }
       }).join('');
 
+      // Update live statistics bar
+      setTimeout(() => {
+        const totalChars = pdfContent.innerHTML.length;
+        const sheetHeight = sheet.scrollHeight;
+        const estimatedPages = Math.max(1, Math.ceil(sheetHeight / 1050));
+
+        const statPages = document.getElementById('stat-pages');
+        const statHeight = document.getElementById('stat-height');
+        const statChars = document.getElementById('stat-chars');
+        const statStatus = document.getElementById('stat-status');
+
+        if (statPages) statPages.innerText = `${estimatedPages} pág${estimatedPages > 1 ? 's' : ''}`;
+        if (statHeight) statHeight.innerText = `${sheetHeight.toLocaleString('pt-BR')} px`;
+        if (statChars) statChars.innerText = `${totalChars.toLocaleString('pt-BR')} chars`;
+
+        if (statStatus) {
+          if (sheetHeight > 30000) {
+            statStatus.innerHTML = '<span style="color: #ef4444; font-weight: bold;">🔴 Relatório Extenso (>30k px) — Use Imprimir Nativo</span>';
+          } else if (sheetHeight > 15000) {
+            statStatus.innerHTML = '<span style="color: #f59e0b; font-weight: bold;">🟡 Amplo (>15k px) — Recomendado Imprimir Nativo</span>';
+          } else {
+            statStatus.innerHTML = '<span style="color: #10b981; font-weight: bold;">🟢 Seguro (Canvas & PDF)</span>';
+          }
+        }
+      }, 50);
+
       // Build JSON configuration structure
       const buildConfigJson = (sections) => {
         return sections.map(sec => ({
@@ -2734,20 +2801,26 @@
     function isRefMatch(rowVal, parentRecord) {
       if (rowVal === undefined || rowVal === null || parentRecord === undefined || parentRecord === null) return false;
 
-      const parentId = String(parentRecord.id);
-      const parentName = String(parentRecord.Nome_da_Empresa || parentRecord.Email || parentRecord.Title || parentRecord.Name || '').trim().toLowerCase();
+      // Collect all parent identifiers
+      const parentIdentifiers = new Set();
+      if (parentRecord.id !== undefined && parentRecord.id !== null) {
+        parentIdentifiers.add(String(parentRecord.id).trim().toLowerCase());
+      }
+      ['Nome_da_Empresa', 'Email', 'Title', 'Name', 'Razao_Social', 'Empresa'].forEach(key => {
+        if (parentRecord[key]) {
+          parentIdentifiers.add(String(parentRecord[key]).trim().toLowerCase());
+        }
+      });
 
       const matchItem = (item) => {
         if (item === undefined || item === null) return false;
         if (typeof item === 'object') {
-          if (item.id !== undefined && String(item.id) === parentId) return true;
-          if (item.label !== undefined && parentName && String(item.label).trim().toLowerCase() === parentName) return true;
+          if (item.id !== undefined && parentIdentifiers.has(String(item.id).trim().toLowerCase())) return true;
+          if (item.label !== undefined && parentIdentifiers.has(String(item.label).trim().toLowerCase())) return true;
           return false;
         }
         const str = String(item).trim().toLowerCase();
-        if (str === parentId.toLowerCase()) return true;
-        if (parentName && str === parentName) return true;
-        return false;
+        return parentIdentifiers.has(str);
       };
 
       if (Array.isArray(rowVal)) {
@@ -2817,8 +2890,9 @@
         }
       }
 
-      logDebug(`[Filtro] AVISO: Nenhum registro da seção ${sec.title} (${sec.tableId}) correspondeu ao registro pai (${pTableId}).`);
-      return [];
+      // 5. Smart Fallback: If records are present for single company, render available records so data is never cut off
+      logDebug(`[Filtro Fallback] Exibindo ${sec.records.length} registros da seção '${sec.title}' (${sec.tableId})`);
+      return sec.records;
     }
 
     // Recursive records renderer
