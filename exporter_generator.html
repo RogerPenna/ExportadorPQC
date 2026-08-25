@@ -2704,22 +2704,35 @@
     function renderSectionRecordsHTML(sec, parentRecord) {
       const activeCols = sec.columns.filter(c => c.enabled);
       
-      // Filter records if linking to a parent record
+      // Filter records
       let filteredRecords = sec.records || [];
-      if (parentRecord && sec.linkColumn) {
-        const parentVal = parentRecord.id || parentRecord.Email || parentRecord.Nome_da_Empresa;
-        filteredRecords = sec.records.filter(row => {
-          const rowVal = row[sec.linkColumn];
-          if (rowVal === undefined || rowVal === null) return false;
-          if (typeof rowVal === 'object' && rowVal !== null) {
-            return String(rowVal.id) === String(parentVal) || String(rowVal.label) === String(parentVal);
-          }
-          return String(rowVal) === String(parentVal);
-        });
+      if (parentRecord) {
+        if (sec.linkColumn) {
+          const parentVal = parentRecord.id || parentRecord.Email || parentRecord.Nome_da_Empresa;
+          filteredRecords = sec.records.filter(row => {
+            const rowVal = row[sec.linkColumn];
+            if (rowVal === undefined || rowVal === null) return false;
+            if (typeof rowVal === 'object' && rowVal !== null) {
+              return String(rowVal.id) === String(parentVal) || String(rowVal.label) === String(parentVal);
+            }
+            return String(rowVal) === String(parentVal);
+          });
+        } else if (parentRecord.id) {
+          // Parent record provided for section without explicit linkColumn
+          const matched = sec.records.filter(row => String(row.id) === String(parentRecord.id));
+          if (matched.length > 0) filteredRecords = matched;
+        }
+      } else if (activeGristRecord && activeGristRecord.id) {
+        // Root section: filter by active selected record in Grist if table matches
+        const matched = sec.records.filter(row => String(row.id) === String(activeGristRecord.id));
+        if (matched.length > 0) filteredRecords = matched;
       }
 
-      // Apply maxRecords limit (0 = unlimited)
-      const maxRec = (sec.maxRecords !== undefined && sec.maxRecords > 0) ? sec.maxRecords : Infinity;
+      // Apply maxRecords limit (0 = unlimited for child sections; for root section default to 1 if unspecified)
+      let maxRec = (sec.maxRecords !== undefined && sec.maxRecords > 0) ? sec.maxRecords : Infinity;
+      if (!parentRecord && (sec.maxRecords === undefined || sec.maxRecords === 0) && (!activeGristRecord || !activeGristRecord.id)) {
+        maxRec = 1;
+      }
       const cappedRecords = filteredRecords.slice(0, maxRec);
       const isCapped = filteredRecords.length > cappedRecords.length;
       
@@ -2915,6 +2928,7 @@
         }
         document.body.removeChild(wrapper);
       }
+    }
 
     function exportExcel() {
       const wb = XLSX.utils.book_new();
