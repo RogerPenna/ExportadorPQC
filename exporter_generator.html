@@ -814,37 +814,23 @@
       </div>
     </div>
 
-    <div class="panel-footer">
-      <button class="btn-action" onclick="exportPDF()">
-        <span>Gerar Relatório PDF</span>
+    <div class="panel-footer" style="display: flex; flex-direction: column; gap: 8px;">
+      <button class="btn-action" onclick="openPrintDrawer()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.3);" title="Abrir painel de impressão e métricas do PDF">
+        <span>🖨️ Imprimir & Opções de PDF</span>
       </button>
-      <button class="btn-action btn-outline" onclick="exportExcel()">
-        <span>Exportar Excel (XLSX)</span>
-      </button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-action btn-outline" onclick="exportPDF()" style="flex: 1; font-size: 0.75rem;">
+          <span>Gerar PDF</span>
+        </button>
+        <button class="btn-action btn-outline" onclick="exportExcel()" style="flex: 1; font-size: 0.75rem;">
+          <span>Exportar XLSX</span>
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- Right Live PDF Preview Panel -->
   <div class="right-panel">
-    <!-- Live Preview Statistics & Print Toolbar -->
-    <div id="preview-stats-bar" style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 8.5pt; color: #94a3b8; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-        <div>📄 <b style="color: #cbd5e1;">Páginas A4 (Est.):</b> <span id="stat-pages" style="color: #60a5fa; font-weight: 700; font-size: 9.5pt;">1</span></div>
-        <div>📏 <b style="color: #cbd5e1;">Altura:</b> <span id="stat-height" style="color: #34d399; font-weight: 700; font-size: 9.5pt;">0 px</span></div>
-        <div>🔤 <b style="color: #cbd5e1;">Caracteres:</b> <span id="stat-chars" style="color: #a78bfa; font-weight: 700; font-size: 9.5pt;">0</span></div>
-        <div>📊 <b style="color: #cbd5e1;">Status:</b> <span id="stat-status" style="color: #10b981; font-weight: 700;">🟢 Seguro (Canvas)</span></div>
-      </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <select id="report-scope-select" onchange="updatePreview()" style="background: #0f172a; color: #f8fafc; border: 1px solid #334155; padding: 6px 10px; border-radius: 6px; font-size: 8.5pt; font-weight: 600; cursor: pointer; outline: none;" title="Escolha se deseja gerar o relatório de 1 empresa ou o consolidado de todas">
-          <option value="selected" selected>🏢 1 Empresa Selecionada</option>
-          <option value="all">📚 Consolidado (Todas as Empresas)</option>
-        </select>
-        <button onclick="window.print()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 8.5pt; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.3);" title="Salvar PDF com o motor nativo do Chrome (Sem limite de altura/páginas)">
-          🖨️ Imprimir / PDF Nativo
-        </button>
-      </div>
-    </div>
-
     <div class="paper-container" id="pdf-preview-sheet">
       <div class="report-header" id="pdf-header">
         <div class="report-title" id="pdf-title">Relatório Consolidado PQC</div>
@@ -857,6 +843,77 @@
       
       <div id="pdf-sections-content">
         <!-- Rendered hierarchical lists -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Print & Export Options Drawer -->
+  <div id="print-drawer" class="columns-drawer">
+    <div class="drawer-header">
+      <h2 style="font-size: 1.1rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+        🖨️ Opções de Impressão & PDF
+      </h2>
+      <button onclick="closePrintDrawer()" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer;">✕</button>
+    </div>
+    
+    <div class="drawer-content" style="gap: 16px; padding: 20px;">
+      <!-- Escopo do Relatório -->
+      <div style="background: rgba(15,23,42,0.6); border: 1px solid #334155; padding: 14px; border-radius: 8px;">
+        <label style="color: #60a5fa; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; display: block; margin-bottom: 8px;">
+          🏢 Escopo da Exportação
+        </label>
+        <select id="report-scope-select" onchange="updatePreview()" style="width: 100%; background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 8px 10px; border-radius: 6px; font-size: 9pt; font-weight: 600; outline: none;">
+          <option value="selected" selected>🏢 1 Empresa Selecionada (Individual)</option>
+          <option value="all">📚 Consolidado (Todas as 14 Empresas)</option>
+        </select>
+        <span style="font-size: 7.5pt; color: #94a3b8; display: block; margin-top: 6px;">
+          Escolha entre exportar apenas a empresa selecionada ou o relatório consolidado com o banco completo.
+        </span>
+      </div>
+
+      <!-- Métricas em Tempo Real -->
+      <div style="background: rgba(15,23,42,0.6); border: 1px solid #334155; padding: 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;">
+        <label style="color: #34d399; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; display: block;">
+          📊 Estatísticas do Documento
+        </label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="background: #1e293b; padding: 10px; border-radius: 6px; border: 1px solid #334155;">
+            <div style="font-size: 7.5pt; color: #94a3b8;">Páginas A4 (Est.)</div>
+            <div id="stat-pages" style="font-size: 1.1rem; font-weight: 700; color: #60a5fa;">1 pág</div>
+          </div>
+          <div style="background: #1e293b; padding: 10px; border-radius: 6px; border: 1px solid #334155;">
+            <div style="font-size: 7.5pt; color: #94a3b8;">Altura Total</div>
+            <div id="stat-height" style="font-size: 1.1rem; font-weight: 700; color: #34d399;">0 px</div>
+          </div>
+          <div style="background: #1e293b; padding: 10px; border-radius: 6px; border: 1px solid #334155;">
+            <div style="font-size: 7.5pt; color: #94a3b8;">Caracteres</div>
+            <div id="stat-chars" style="font-size: 1rem; font-weight: 700; color: #a78bfa;">0</div>
+          </div>
+          <div style="background: #1e293b; padding: 10px; border-radius: 6px; border: 1px solid #334155;">
+            <div style="font-size: 7.5pt; color: #94a3b8;">Diagnóstico</div>
+            <div id="stat-status" style="font-size: 0.78rem; font-weight: 700; color: #10b981;">🟢 Seguro</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões de Ação Principal -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+        <button onclick="window.print()" style="width: 100%; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 12px; border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.4);" title="Recomendado para PDFs sem limites de altura">
+          🖨️ Imprimir / Salvar PDF Nativo
+        </button>
+        <span style="font-size: 7.5pt; color: #94a3b8; text-align: center;">
+          💡 Usa o gerador nativo do navegador. Permite salvar em PDF com alta qualidade e 0 limites de páginas.
+        </span>
+
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 6px 0;">
+
+        <button onclick="exportPDF()" style="width: 100%; background: #1e293b; color: #f8fafc; border: 1px solid #475569; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;" title="Gerar arquivo PDF via Canvas">
+          📄 Gerar PDF via Canvas (.pdf)
+        </button>
+
+        <button onclick="exportExcel()" style="width: 100%; background: #1e293b; color: #f8fafc; border: 1px solid #475569; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+          📊 Exportar Excel (.xlsx)
+        </button>
       </div>
     </div>
   </div>
@@ -3099,6 +3156,7 @@
         `;
       }).join('');
 
+      const cappedNotice = isCapped ? `<div style="text-align:center; font-size:7.5pt; color:#94a3b8; padding:6px; border:1px dashed #cbd5e1; border-radius:6px; margin-top:4px;">⚠️ Pré-visualização da tabela '${sec.tableId}' limitada a ${maxRec} de ${filteredRecords.length} registros.</div>` : '';
       const isSubSection = parentRecord !== null;
       const secPageBreakClass = isSubSection ? ' has-page-break' : '';
 
@@ -3593,6 +3651,19 @@
     window.onLayoutItemDragOver = onLayoutItemDragOver;
     window.onLayoutItemDrop = onLayoutItemDrop;
     window.onLayoutItemDragEnd = onLayoutItemDragEnd;
+    function openPrintDrawer() {
+      closeColumnsDrawer();
+      document.getElementById('print-drawer').classList.add('open');
+      document.body.classList.add('drawer-open');
+    }
+
+    function closePrintDrawer() {
+      document.getElementById('print-drawer').classList.remove('open');
+      document.body.classList.remove('drawer-open');
+    }
+
+    window.openPrintDrawer = openPrintDrawer;
+    window.closePrintDrawer = closePrintDrawer;
     window.openColumnsDrawer = openColumnsDrawer;
     window.closeColumnsDrawer = closeColumnsDrawer;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
