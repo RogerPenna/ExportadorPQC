@@ -2700,37 +2700,97 @@
       return formatted;
     }
 
+    // Helper to match a Grist reference value (Ref, RefList, scalar, object) against a parent record
+    function isRefMatch(rowVal, parentRecord) {
+      if (rowVal === undefined || rowVal === null || parentRecord === undefined || parentRecord === null) return false;
+
+      const parentId = String(parentRecord.id);
+      const parentName = String(parentRecord.Nome_da_Empresa || parentRecord.Email || parentRecord.Title || parentRecord.Name || '').trim().toLowerCase();
+
+      const matchItem = (item) => {
+        if (item === undefined || item === null) return false;
+        if (typeof item === 'object') {
+          if (item.id !== undefined && String(item.id) === parentId) return true;
+          if (item.label !== undefined && parentName && String(item.label).trim().toLowerCase() === parentName) return true;
+          return false;
+        }
+        const str = String(item).trim().toLowerCase();
+        if (str === parentId.toLowerCase()) return true;
+        if (parentName && str === parentName) return true;
+        return false;
+      };
+
+      if (Array.isArray(rowVal)) {
+        return rowVal.some(item => matchItem(item));
+      }
+      return matchItem(rowVal);
+    }
+
+    // Helper to get correctly linked child records for a parent record
+    function getFilteredChildRecords(sec, parentRecord) {
+      if (!sec.records || sec.records.length === 0) return [];
+      if (!parentRecord) return sec.records;
+
+      // 1. Try explicit linkColumn if set
+      if (sec.linkColumn && sec.linkColumn.trim() !== '') {
+        const matches = sec.records.filter(row => isRefMatch(row[sec.linkColumn], parentRecord));
+        if (matches.length > 0) return matches;
+      }
+
+      // 2. Auto-detect link column by column names
+      const candidateCols = (sec.columns || []).map(c => c.colId).filter(colId => {
+        const lower = colId.toLowerCase();
+        return lower.includes('empresa') || lower.includes('ref') || lower.includes('parent');
+      });
+
+      for (const colId of candidateCols) {
+        const matches = sec.records.filter(row => isRefMatch(row[colId], parentRecord));
+        if (matches.length > 0) {
+          sec.linkColumn = colId;
+          logDebug(`Auto-detectado linkColumn para ${sec.title}: ${colId}`);
+          return matches;
+        }
+      }
+
+      // 3. Fallback check across all columns
+      if (sec.records.length > 0) {
+        const firstRow = sec.records[0];
+        for (const colId of Object.keys(firstRow)) {
+          if (colId === 'id' || colId.startsWith('gristHelper_')) continue;
+          const matches = sec.records.filter(row => isRefMatch(row[colId], parentRecord));
+          if (matches.length > 0) {
+            sec.linkColumn = colId;
+            logDebug(`Auto-detectado linkColumn por varredura para ${sec.title}: ${colId}`);
+            return matches;
+          }
+        }
+      }
+
+      // If child section fails to match any parent reference, return empty array to prevent 1,000+ card DOM overflow
+      logDebug(`Aviso: Nenhum registro da seção ${sec.title} (${sec.tableId}) correspondeu ao registro pai.`);
+      return [];
+    }
+
     // Recursive records renderer
     function renderSectionRecordsHTML(sec, parentRecord) {
       const activeCols = sec.columns.filter(c => c.enabled);
       
-      // Filter records
-      let filteredRecords = sec.records || [];
+      let filteredRecords = [];
       if (parentRecord) {
-        if (sec.linkColumn) {
-          const parentVal = parentRecord.id || parentRecord.Email || parentRecord.Nome_da_Empresa;
-          filteredRecords = sec.records.filter(row => {
-            const rowVal = row[sec.linkColumn];
-            if (rowVal === undefined || rowVal === null) return false;
-            if (typeof rowVal === 'object' && rowVal !== null) {
-              return String(rowVal.id) === String(parentVal) || String(rowVal.label) === String(parentVal);
-            }
-            return String(rowVal) === String(parentVal);
-          });
-        } else if (parentRecord.id) {
-          // Parent record provided for section without explicit linkColumn
-          const matched = sec.records.filter(row => String(row.id) === String(parentRecord.id));
-          if (matched.length > 0) filteredRecords = matched;
-        }
+        // Child section: filter records linked to parent
+        filteredRecords = getFilteredChildRecords(sec, parentRecord);
       } else if (activeGristRecord && activeGristRecord.id) {
-        // Root section: filter by active selected record in Grist if table matches
-        const matched = sec.records.filter(row => String(row.id) === String(activeGristRecord.id));
-        if (matched.length > 0) filteredRecords = matched;
+        // Root section: filter by selected Grist record if ID matches
+        const matched = (sec.records || []).filter(row => String(row.id) === String(activeGristRecord.id));
+        filteredRecords = matched.length > 0 ? matched : (sec.records || []).slice(0, 1);
+      } else {
+        // Root section without active record: take 1 record default
+        filteredRecords = (sec.records || []).slice(0, 1);
       }
 
-      // Apply maxRecords limit (0 = unlimited for child sections; for root section default to 1 if unspecified)
+      // Apply maxRecords limit (0 = unlimited for child sections; for root section default to 1)
       let maxRec = (sec.maxRecords !== undefined && sec.maxRecords > 0) ? sec.maxRecords : Infinity;
-      if (!parentRecord && (sec.maxRecords === undefined || sec.maxRecords === 0) && (!activeGristRecord || !activeGristRecord.id)) {
+      if (!parentRecord && (sec.maxRecords === undefined || sec.maxRecords === 0)) {
         maxRec = 1;
       }
       const cappedRecords = filteredRecords.slice(0, maxRec);
