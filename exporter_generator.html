@@ -1724,8 +1724,11 @@
     async function updateSectionsColumnsFromMetadata(sections) {
       await Promise.all(sections.map(async sec => {
         try {
-          const schema = await tableLens.getTableSchema(sec.tableId, { mode: 'raw' });
-          const rawCols = Object.values(schema);
+          const rawSchema = await tableLens.getTableSchema(sec.tableId, { mode: 'raw' });
+          const cleanSchema = await tableLens.getTableSchema(sec.tableId, { mode: 'clean' });
+          const rawCols = Object.values(rawSchema || {});
+          const cleanColsMap = cleanSchema || {};
+
           if (rawCols.length > 0) {
             const savedColMap = new Map(sec.columns.map(c => [c.colId, c]));
 
@@ -1739,6 +1742,7 @@
             for (const saved of savedColMap.values()) {
               const gristMeta = gristMetaMap.get(saved.colId);
               if (gristMeta) {
+                const cleanMeta = cleanColsMap[saved.colId];
                 orderedCols.push({
                   colId: saved.colId,
                   label: (gristMeta.label !== undefined && gristMeta.label !== null) ? gristMeta.label : saved.colId,
@@ -1751,6 +1755,7 @@
                   refTargetCol: saved.refTargetCol || null,
                   refTargetTable: saved.refTargetTable || null,
                   groupId: saved.groupId || null,
+                  conditionalFormattingRules: cleanMeta?.conditionalFormattingRules || [],
                   widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
                 });
                 gristMetaMap.delete(saved.colId);
@@ -1758,6 +1763,7 @@
             }
 
             for (const [colId, gristMeta] of gristMetaMap.entries()) {
+              const cleanMeta = cleanColsMap[colId];
               orderedCols.push({
                 colId: colId,
                 label: (gristMeta.label !== undefined && gristMeta.label !== null) ? gristMeta.label : colId,
@@ -1768,6 +1774,7 @@
                 refTargetCol: null,
                 refTargetTable: null,
                 groupId: null,
+                conditionalFormattingRules: cleanMeta?.conditionalFormattingRules || [],
                 widgetOptions: gristMeta.widgetOptions ? (typeof gristMeta.widgetOptions === 'string' ? (() => { try { return JSON.parse(gristMeta.widgetOptions); } catch(e) { return {}; } })() : gristMeta.widgetOptions) : {}
               });
             }
@@ -1776,10 +1783,10 @@
               ...orderedCols.filter(c => c.enabled !== false),
               ...orderedCols.filter(c => c.enabled === false)
             ];
-            logDebug(`Labels do Grist aplicados para colunas de ${sec.tableId}`);
+            logDebug(`Labels e regras de formatação condicional do Grist aplicados para colunas de ${sec.tableId}`);
           }
         } catch (err) {
-          logDebug(`Erro ao ler schema de ${sec.tableId}: ${err.message}`);
+          logDebug(`Erro ao atualizar colunas de ${sec.tableId}: ${err.message}`);
         }
         if (sec.children && sec.children.length > 0) {
           await updateSectionsColumnsFromMetadata(sec.children);
