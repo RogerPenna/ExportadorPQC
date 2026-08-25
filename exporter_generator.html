@@ -1179,11 +1179,12 @@
     }
 
     // Ensures every section loaded from JSON has a valid id and defaults
-    function sanitizeSections(sections, depth = 0) {
+    function sanitizeSections(sections, depth = 0, parentTableId = null) {
       for (const sec of sections) {
         if (!sec.id) {
           sec.id = 'sec_' + Math.random().toString(36).substring(2, 9);
         }
+        if (parentTableId) sec.parentTableId = parentTableId;
         if (!sec.columns) sec.columns = [];
         if (!sec.children) sec.children = [];
         if (!sec.records) sec.records = [];
@@ -1198,7 +1199,7 @@
           sec.layoutItems = (sec.columns || []).map(c => ({ type: 'column', colId: c.colId }));
         }
 
-        sanitizeSections(sec.children, depth + 1);
+        sanitizeSections(sec.children, depth + 1, sec.tableId);
       }
     }
 
@@ -2389,7 +2390,7 @@
       return `
         <div class="section-card" style="margin-left: ${indent}px; border-left-color: ${depth > 0 ? 'var(--accent)' : 'var(--primary)'}">
           <div class="section-card-header">
-            <span class="section-card-title">${depth === 0 ? 'Seção Principal' : 'Sub-seção de ' + sec.parentTableId}</span>
+            <span class="section-card-title">${depth === 0 ? 'Seção Principal' : 'Sub-seção de ' + (sec.parentTableId || (reportSections[0] ? reportSections[0].tableId : 'Pai'))}</span>
             <div class="section-controls">
               <button class="btn-icon" style="color: var(--primary)" onclick="addChildSection('${sec.id}')">+ Sub-seção</button>
               <button class="btn-icon" style="color: var(--danger)" onclick="removeSection('${sec.id}')">✕</button>
