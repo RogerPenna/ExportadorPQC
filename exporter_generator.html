@@ -2773,35 +2773,6 @@
       return false;
     }
 
-    function moveSection(secId, direction) {
-      const findParentArray = (sections) => {
-        const idx = sections.findIndex(s => s.id === secId);
-        if (idx !== -1) return { array: sections, index: idx };
-        for (const sec of sections) {
-          const res = findParentArray(sec.children);
-          if (res) return res;
-        }
-        return null;
-      };
-      
-      const res = findParentArray(reportSections);
-      if (!res) return;
-      const { array, index } = res;
-      
-      if (direction === 'up' && index > 0) {
-        const temp = array[index];
-        array[index] = array[index - 1];
-        array[index - 1] = temp;
-      } else if (direction === 'down' && index < array.length - 1) {
-        const temp = array[index];
-        array[index] = array[index + 1];
-        array[index + 1] = temp;
-      }
-      
-      renderSectionsManager();
-      updatePreview();
-    }
-
     function moveColumn(secId, colId, direction) {
       const sec = findSectionById(reportSections, secId);
       if (!sec) return;
@@ -3979,7 +3950,6 @@
     window.addRootSection = addRootSection;
     window.addChildSection = addChildSection;
     window.removeSection = removeSection;
-    window.moveSection = moveSection;
     window.moveColumn = moveColumn;
     window.onSectionTableChange = onSectionTableChange;
     window.onSectionTitleChange = onSectionTitleChange;
