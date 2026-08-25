@@ -530,6 +530,32 @@
       display: none;
     }
 
+    .raw-html-content {
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      white-space: normal !important;
+      word-break: normal !important;
+    }
+    .raw-html-content h1, 
+    .raw-html-content h2, 
+    .raw-html-content h3, 
+    .raw-html-content h4, 
+    .raw-html-content h5, 
+    .raw-html-content h6 {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    .raw-html-content p {
+      margin-top: 0 !important;
+      margin-bottom: 4px !important;
+    }
+    .raw-html-content table {
+      border-collapse: collapse !important;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+
     @media screen {
       .preview-section-container.has-page-break {
         border-top: 2.5px dashed var(--pdf-theme-color, #3b82f6) !important;
@@ -3268,27 +3294,56 @@
             const cellBold = c.widgetOptions?.fontBold ? 'font-weight: bold' : '';
             const cellItalic = c.widgetOptions?.fontItalic ? 'font-style: italic' : '';
             const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
+            const isRawHtml = c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
 
-            innerContentBlocks.push(`
-              <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
-                <div class="preview-field-controls">
-                  <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
-                  <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
-                  <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
+            if (isRawHtml) {
+              const showLabel = c.useLabel === true;
+              innerContentBlocks.push(`
+                <div class="preview-field-container preview-html-field" style="margin-bottom: 4px; width: 100%; border: none; padding: 0; background: transparent;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                  <div class="preview-field-controls">
+                    <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
+                    <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
+                    <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
+                  </div>
+                  ${showLabel ? `<span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;">${colName}</span>` : ''}
+                  <div class="raw-html-content" style="width: 100%; overflow: visible; white-space: normal;">
+                    ${val}
+                  </div>
                 </div>
-                <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">${colName}</span>
-                <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
-              </div>
-            `);
+              `);
+            } else {
+              innerContentBlocks.push(`
+                <div class="preview-field-container" style="text-align: ${align}; margin-bottom: 8px;" onclick="onReportFieldClick(event, '${sec.id}', '${c.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                  <div class="preview-field-controls">
+                    <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'up')" title="Mover Campo para Cima">▲</button>
+                    <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
+                    <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
+                  </div>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block;">${colName}</span>
+                  <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg}; ${cellColor}; ${cellBold}; ${cellItalic}; padding: 4px; border-radius: 4px; display: inline-block; line-height: 1.4;">${val}</span>
+                </div>
+              `);
+            }
           }
         });
 
+        const hasOnlyRawHtml = activeCols.length > 0 && activeCols.every(c => {
+          let cellVal = row[c.colId];
+          return c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
+        });
+
+        const cardStyle = hasOnlyRawHtml 
+          ? 'padding: 0; margin-bottom: 4px; background: transparent; border: none; box-shadow: none;'
+          : (rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : '');
+
         return `
-          <div class="pdf-record-card${pageBreakClass}" style="${rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : ''}">
-            <div class="pdf-record-title">
-              <span>Registro #${rIdx + 1}</span>
-              <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
-            </div>
+          <div class="pdf-record-card${pageBreakClass}" style="${cardStyle}">
+            ${hasOnlyRawHtml ? '' : `
+              <div class="pdf-record-title">
+                <span>Registro #${rIdx + 1}</span>
+                <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
+              </div>
+            `}
             ${innerContentBlocks.join('')}
             ${childrenHtml ? `<div style="margin-top: 8px; padding-left: var(--pdf-sub-indent, 6px); border-left: 2px solid var(--pdf-theme-color, #3b82f6);">${childrenHtml}</div>` : ''}
           </div>
