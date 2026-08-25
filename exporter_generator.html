@@ -1462,6 +1462,7 @@
           maxRecords: sec.maxRecords !== undefined ? sec.maxRecords : 0,
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
+          showRecordHeader: sec.showRecordHeader !== false,
           layoutItems: (sec.layoutItems || []).map(item => {
             if (item.type === 'group') {
               return {
@@ -2078,6 +2079,15 @@
       activePropsSectionId = null;
     }
 
+    function onSectionRecHeaderChange(secId) {
+      const select = document.getElementById(`prop-recheader-${secId}`);
+      const sec = findSectionById(reportSections, secId);
+      if (sec && select) {
+        sec.showRecordHeader = select.value === 'true';
+        updatePreview();
+      }
+    }
+
     function renderSectionPropsBody(sec) {
       const container = document.getElementById('section-props-body');
       if (!container) return;
@@ -2104,6 +2114,14 @@
               <span style="font-size:0.72rem; color: var(--text-muted); font-weight:normal;">(0 = ilimitado)</span>
             </label>
             <input type="number" id="prop-maxrec-${sec.id}" value="${sec.maxRecords !== undefined ? sec.maxRecords : (isSubSection ? 0 : 1)}" min="0" style="width:100px; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;" oninput="onSectionMaxRecordsChange('${sec.id}')">
+          </div>
+
+          <div class="form-group">
+            <label style="font-weight: 700; color: #fff;">Cabeçalho do Registro ("Registro #1")</label>
+            <select id="prop-recheader-${sec.id}" onchange="onSectionRecHeaderChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+              <option value="true" ${sec.showRecordHeader !== false ? 'selected' : ''}>Exibir ("Registro #1 — Tabela X")</option>
+              <option value="false" ${sec.showRecordHeader === false ? 'selected' : ''}>Ocultar (Remover Cabeçalho dos Registros)</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -2150,9 +2168,12 @@
             </div>
           ` : ''}
 
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 8px;">
             <button class="btn-action" style="width: 100%; padding: 10px;" onclick="openColumnsDrawer('${sec.id}')">
               📊 Configurar Colunas (${sec.columns.filter(c => c.enabled).length} ativas)
+            </button>
+            <button class="btn-action btn-outline" style="width: 100%; padding: 8px; font-size: 0.78rem; border-color: #64748b; color: #cbd5e1;" onclick="debugConditionalFormatting('${sec.id}')">
+              🔬 Debug Formatação Condicional Grist
             </button>
           </div>
         </div>
@@ -2961,6 +2982,7 @@
           maxRecords: sec.maxRecords !== undefined ? sec.maxRecords : 0,
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
+          showRecordHeader: sec.showRecordHeader !== false,
           layoutItems: (sec.layoutItems || []).map(item => {
             if (item.type === 'group') {
               return {
@@ -3004,17 +3026,37 @@
     function evaluateGristRuleFormula(formula, row, colId) {
       if (!formula || typeof formula !== 'string') return false;
       try {
-        let expr = formula.replace(/\$([A-Za-z0-9_]+)/g, (match, p1) => {
-          let val = row[p1];
-          if (val === undefined || val === null) val = 0;
-          if (typeof val === 'number') return String(val);
-          if (typeof val === 'string') {
-            const num = parseFloat(val.replace(',', '.'));
-            return !isNaN(num) ? String(num) : JSON.stringify(val);
+        const currentVal = row ? row[colId] : null;
+        let expr = formula;
+
+        // Replace 'value' keyword with cell value
+        expr = expr.replace(/\bvalue\b/g, JSON.stringify(currentVal));
+
+        // Replace 'rec.ColId' with row['ColId']
+        expr = expr.replace(/\brec\.([A-Za-z0-9_]+)/g, (match, p1) => {
+          let v = row ? row[p1] : null;
+          if (v === undefined || v === null) return '0';
+          if (typeof v === 'number') return String(v);
+          if (typeof v === 'string') {
+            const num = parseFloat(v.replace(',', '.'));
+            return !isNaN(num) ? String(num) : JSON.stringify(v);
           }
-          return JSON.stringify(val);
+          return JSON.stringify(v);
         });
 
+        // Replace '$ColId' with row['ColId']
+        expr = expr.replace(/\$([A-Za-z0-9_]+)/g, (match, p1) => {
+          let v = row ? row[p1] : null;
+          if (v === undefined || v === null) return '0';
+          if (typeof v === 'number') return String(v);
+          if (typeof v === 'string') {
+            const num = parseFloat(v.replace(',', '.'));
+            return !isNaN(num) ? String(num) : JSON.stringify(v);
+          }
+          return JSON.stringify(v);
+        });
+
+        // Replace Python logical operators
         expr = expr.replace(/\band\b/gi, '&&')
                    .replace(/\bor\b/gi, '||')
                    .replace(/\bnot\b/gi, '!');
@@ -3035,15 +3077,19 @@
 
       if (!colMeta || !row) return styles;
 
-      if (Array.isArray(colMeta.conditionalFormattingRules) && colMeta.conditionalFormattingRules.length > 0) {
-        for (const rule of colMeta.conditionalFormattingRules) {
+      const rules = colMeta.conditionalFormattingRules || [];
+
+      if (Array.isArray(rules) && rules.length > 0) {
+        for (const rule of rules) {
           let isMatch = false;
 
           if (rule.helperColumnId && row[rule.helperColumnId] !== undefined) {
             if (row[rule.helperColumnId] === true || row[rule.helperColumnId] === 1) {
               isMatch = true;
             }
-          } else if (rule.conditionFormula) {
+          }
+          
+          if (!isMatch && rule.conditionFormula) {
             isMatch = evaluateGristRuleFormula(rule.conditionFormula, row, colMeta.colId);
           }
 
@@ -3058,6 +3104,38 @@
       }
 
       return styles;
+    }
+
+    async function debugConditionalFormatting(secId) {
+      const sec = findSectionById(reportSections, secId);
+      if (!sec) { alert('Seção não encontrada.'); return; }
+
+      const schema = await tableLens.getTableSchema(sec.tableId, { mode: 'clean' });
+      const sampleRow = (sec.records && sec.records.length > 0) ? sec.records[0] : {};
+
+      let report = `=== DEBUG FORMATAÇÃO CONDICIONAL (${sec.tableId}) ===\n\n`;
+      report += `Total Registros: ${sec.records ? sec.records.length : 0}\n`;
+      report += `Chaves do Registro 1: ${Object.keys(sampleRow).join(', ')}\n\n`;
+
+      Object.values(schema).forEach(c => {
+        if (c.conditionalFormattingRules && c.conditionalFormattingRules.length > 0) {
+          report += `Coluna: ${c.colId} (${c.label})\n`;
+          report += `Rules em Metadados (${c.conditionalFormattingRules.length}):\n`;
+          c.conditionalFormattingRules.forEach((r, idx) => {
+            report += `  - Regra #${idx + 1}: Helper=${r.helperColumnId || 'none'} | Formula="${r.conditionFormula || 'none'}" | Style=${JSON.stringify(r.style)}\n`;
+          });
+          const resolved = resolveCellConditionalStyles(sampleRow, c);
+          report += `  -> Estilo Resultante para Registro 1: ${JSON.stringify(resolved)}\n\n`;
+        }
+      });
+
+      if (!report.includes('Rules em Metadados')) {
+        report += `Nenhuma regra de formatação condicional detectada nos metadados da tabela '${sec.tableId}'.\n`;
+        report += `Verifique se as regras foram criadas no painel 'Estilo de Célula' do Grist.\n`;
+      }
+
+      alert(report);
+      console.log(report);
     }
 
     function formatChoiceValue(valStr, colMeta = null) {
@@ -3519,13 +3597,14 @@
           return c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
         });
 
-        const cardStyle = hasOnlyRawHtml 
-          ? 'padding: 0; margin-bottom: 4px; background: transparent; border: none; box-shadow: none;'
+        const hideRecordHeader = sec.showRecordHeader === false || hasOnlyRawHtml;
+        const cardStyle = hideRecordHeader 
+          ? 'padding: 0; margin-bottom: 6px; background: transparent; border: none; box-shadow: none;'
           : (rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : '');
 
         return `
           <div class="pdf-record-card${pageBreakClass}" style="${cardStyle}">
-            ${hasOnlyRawHtml ? '' : `
+            ${hideRecordHeader ? '' : `
               <div class="pdf-record-title">
                 <span>Registro #${rIdx + 1}</span>
                 <span style="font-weight: normal; color: #94a3b8; font-size: 7.5pt;">Tabela: ${sec.tableId}</span>
@@ -4069,6 +4148,8 @@
     window.onSectionTitleChange = onSectionTitleChange;
     window.onSectionMaxRecordsChange = onSectionMaxRecordsChange;
     window.onSectionLinkChange = onSectionLinkChange;
+    window.onSectionRecHeaderChange = onSectionRecHeaderChange;
+    window.debugConditionalFormatting = debugConditionalFormatting;
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
     window.toggleDrawerColumnHtmlMode = toggleDrawerColumnHtmlMode;

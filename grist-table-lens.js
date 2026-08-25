@@ -106,12 +106,11 @@ export const GristTableLens = function(gristInstance) {
 
         const rulesDefinitionsFromMeta = new Map();
         tableEntries.forEach(entry => {
-            if (entry.colId?.startsWith("gristHelper_ConditionalRule") && entry.formula) {
+            if ((entry.colId?.includes("ConditionalRule") || entry.colId?.startsWith("gristHelper_")) && entry.formula) {
                 let ruleStyle = {};
                 if (entry.widgetOptions) { 
                     try { 
-                        const ruleOpts = JSON.parse(entry.widgetOptions);
-                        ruleStyle = ruleOpts;
+                        ruleStyle = typeof entry.widgetOptions === 'string' ? JSON.parse(entry.widgetOptions) : entry.widgetOptions;
                     } catch (e) {} 
                 }
                 rulesDefinitionsFromMeta.set(String(entry.id), { id: String(entry.id), helperColumnId: String(entry.colId), conditionFormula: entry.formula, style: ruleStyle });
@@ -121,17 +120,51 @@ export const GristTableLens = function(gristInstance) {
         tableEntries.forEach(entry => {
             const isDataColumn = entry.type && entry.colId;
             if (isDataColumn) {
-                const wopts = JSON.parse(entry.widgetOptions || '{}');
+                let wopts = {};
+                if (entry.widgetOptions) {
+                    try {
+                        wopts = typeof entry.widgetOptions === 'string' ? JSON.parse(entry.widgetOptions) : entry.widgetOptions;
+                    } catch(e) {}
+                }
+
                 const conditionalFormattingRules = [];
-                const ruleIdList = entry.rules;
-                if (Array.isArray(ruleIdList) && ruleIdList[0] === 'L') {
-                    const stylesFromWidgetOptions = wopts.rulesOptions || [];
-                    ruleIdList.slice(1).forEach((rId, index) => {
+                let ruleIdList = entry.rules;
+
+                if (typeof ruleIdList === 'string') {
+                    try { ruleIdList = JSON.parse(ruleIdList); } catch(e) {}
+                }
+
+                const stylesFromWidgetOptions = Array.isArray(wopts.rulesOptions) ? wopts.rulesOptions : [];
+
+                if (Array.isArray(ruleIdList)) {
+                    const cleanRuleIds = ruleIdList.filter(id => id !== 'L' && id !== null && id !== undefined);
+                    cleanRuleIds.forEach((rId, index) => {
                         const rd = rulesDefinitionsFromMeta.get(String(rId));
+                        const optStyle = stylesFromWidgetOptions[index] || {};
                         if (rd) {
-                            rd.style = stylesFromWidgetOptions[index] || {};
-                            conditionalFormattingRules.push(rd);
-                         }
+                            conditionalFormattingRules.push({
+                                id: rd.id,
+                                helperColumnId: rd.helperColumnId,
+                                conditionFormula: rd.conditionFormula,
+                                style: { ...rd.style, ...optStyle }
+                            });
+                        } else if (Object.keys(optStyle).length > 0) {
+                            conditionalFormattingRules.push({
+                                id: String(rId),
+                                helperColumnId: null,
+                                conditionFormula: null,
+                                style: optStyle
+                            });
+                        }
+                    });
+                } else if (stylesFromWidgetOptions.length > 0) {
+                    stylesFromWidgetOptions.forEach((optStyle, index) => {
+                        conditionalFormattingRules.push({
+                            id: `opt_${index}`,
+                            helperColumnId: null,
+                            conditionFormula: null,
+                            style: optStyle
+                        });
                     });
                 }
                 
