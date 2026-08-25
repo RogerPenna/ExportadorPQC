@@ -530,29 +530,78 @@
       display: none;
     }
 
+    @media screen {
+      .preview-section-container.has-page-break {
+        border-top: 2.5px dashed var(--pdf-theme-color, #3b82f6) !important;
+        padding-top: 18px !important;
+        margin-top: 28px !important;
+        position: relative;
+      }
+      .preview-section-container.has-page-break::before {
+        content: "📄 Início de Nova Página A4";
+        position: absolute;
+        top: -12px;
+        left: 16px;
+        background: var(--pdf-theme-color, #3b82f6);
+        color: #ffffff;
+        font-size: 7.5pt;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+      }
+    }
+
     @media print {
-      body {
+      @page {
+        size: A4 portrait;
+        margin: 12mm 10mm 12mm 10mm;
+      }
+      html, body {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
+        display: block !important;
       }
       .left-panel, .columns-drawer, #preview-stats-bar, .preview-field-controls, .preview-btn, button, .section-controls {
         display: none !important;
       }
       .right-panel {
-        overflow: visible !important;
-        height: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
-        width: 100% !important;
+        overflow: visible !important;
+        display: block !important;
       }
       .paper-container, #pdf-preview-sheet {
-        box-shadow: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
-        width: 100% !important;
+        box-shadow: none !important;
         border: none !important;
+        display: block !important;
+      }
+      .print-only-section-title, .preview-section-header {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+      .pdf-record-card {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      .preview-section-container.has-page-break {
+        break-before: page !important;
+        page-break-before: always !important;
       }
     }
+
     .preview-field-controls {
       position: absolute;
       top: 4px;
@@ -582,6 +631,8 @@
     }
     .exporting-pdf .print-only-section-title {
       display: block !important;
+      break-after: avoid !important;
+      page-break-after: avoid !important;
     }
     .exporting-pdf .preview-section-header {
       display: none !important;
@@ -593,8 +644,8 @@
       margin-bottom: 0 !important;
       background-color: transparent !important;
       box-shadow: none !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
+      page-break-inside: auto !important;
+      break-inside: auto !important;
     }
     .exporting-pdf .pdf-record-card {
       page-break-inside: avoid !important;
@@ -784,6 +835,10 @@
         <div>📊 <b style="color: #cbd5e1;">Status:</b> <span id="stat-status" style="color: #10b981; font-weight: 700;">🟢 Seguro (Canvas)</span></div>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="report-scope-select" onchange="updatePreview()" style="background: #0f172a; color: #f8fafc; border: 1px solid #334155; padding: 6px 10px; border-radius: 6px; font-size: 8.5pt; font-weight: 600; cursor: pointer; outline: none;" title="Escolha se deseja gerar o relatório de 1 empresa ou o consolidado de todas">
+          <option value="selected" selected>🏢 1 Empresa Selecionada</option>
+          <option value="all">📚 Consolidado (Todas as Empresas)</option>
+        </select>
         <button onclick="window.print()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 8.5pt; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.3);" title="Salvar PDF com o motor nativo do Chrome (Sem limite de altura/páginas)">
           🖨️ Imprimir / PDF Nativo
         </button>
@@ -2898,26 +2953,34 @@
     // Recursive records renderer
     function renderSectionRecordsHTML(sec, parentRecord, parentTableId = null) {
       const activeCols = sec.columns.filter(c => c.enabled);
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
       
       let filteredRecords = [];
       if (parentRecord) {
         // Child section: filter records linked to parent
         filteredRecords = getFilteredChildRecords(sec, parentRecord, parentTableId);
-      } else if (activeGristRecord && activeGristRecord.id) {
-        // Root section: filter by selected Grist record if ID matches
-        const matched = (sec.records || []).filter(row => String(row.id) === String(activeGristRecord.id));
-        filteredRecords = matched.length > 0 ? matched : (sec.records || []).slice(0, 1);
-        logDebug(`[Filtro Raiz] Seção principal '${sec.title}' (${sec.tableId}): ${filteredRecords.length} de ${sec.records.length} registros`);
+      } else if (isSingleMode) {
+        // Root section in Single mode: filter by selected Grist record if ID matches
+        if (activeGristRecord && activeGristRecord.id) {
+          const matched = (sec.records || []).filter(row => String(row.id) === String(activeGristRecord.id));
+          filteredRecords = matched.length > 0 ? matched : (sec.records || []).slice(0, 1);
+        } else {
+          filteredRecords = (sec.records || []).slice(0, 1);
+        }
+        logDebug(`[Filtro Raiz 1 Empresa] Seção principal '${sec.title}' (${sec.tableId}): ${filteredRecords.length} de ${sec.records.length} registros`);
       } else {
-        // Root section without active record: take 1 record default
-        filteredRecords = (sec.records || []).slice(0, 1);
-        logDebug(`[Filtro Raiz] Seção principal '${sec.title}' (${sec.tableId}): exibindo 1º registro de ${sec.records.length}`);
+        // Root section in Consolidated mode: render all records!
+        filteredRecords = sec.records || [];
+        logDebug(`[Filtro Raiz Consolidado] Seção principal '${sec.title}' (${sec.tableId}): ${filteredRecords.length} de ${sec.records.length} registros`);
       }
 
-      // Apply maxRecords limit (0 = unlimited for child sections; for root section default to 1)
-      let maxRec = (sec.maxRecords !== undefined && sec.maxRecords > 0) ? sec.maxRecords : Infinity;
-      if (!parentRecord && (sec.maxRecords === undefined || sec.maxRecords === 0)) {
+      // Apply maxRecords limit
+      let maxRec = Infinity;
+      if (isSingleMode && !parentRecord) {
         maxRec = 1;
+      } else if (sec.maxRecords !== undefined && sec.maxRecords > 0) {
+        maxRec = sec.maxRecords;
       }
       const cappedRecords = filteredRecords.slice(0, maxRec);
       const isCapped = filteredRecords.length > cappedRecords.length;
@@ -3036,12 +3099,13 @@
         `;
       }).join('');
 
-      const cappedNotice = isCapped ? `<div style="text-align:center; font-size:7.5pt; color:#94a3b8; padding:6px; border:1px dashed #cbd5e1; border-radius:6px; margin-top:4px;">⚠️ Pré-visualização da tabela '${sec.tableId}' limitada a ${maxRec} de ${filteredRecords.length} registros. (Altere o 'Máx. Registros' para 0 no painel esquerdo para ver todos).</div>` : '';
+      const isSubSection = parentRecord !== null;
+      const secPageBreakClass = isSubSection ? ' has-page-break' : '';
 
       return `
-        <div class="preview-section-container" data-sec-id="${sec.id}">
-          <div class="print-only-section-title" style="font-size: 11pt; font-weight: 700; color: var(--pdf-theme-color, #3b82f6); border-bottom: 1.5px solid var(--pdf-theme-color, #3b82f6); padding-bottom: 3px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">${sec.title}</div>
-          <div class="preview-section-header">
+        <div class="preview-section-container${secPageBreakClass}" data-sec-id="${sec.id}">
+          <div class="print-only-section-title" style="font-size: 11pt; font-weight: 700; color: var(--pdf-theme-color, #3b82f6); border-bottom: 1.5px solid var(--pdf-theme-color, #3b82f6); padding-bottom: 3px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; break-after: avoid; page-break-after: avoid;">${sec.title}</div>
+          <div class="preview-section-header" style="break-after: avoid; page-break-after: avoid;">
             <span class="preview-section-title">${sec.title}</span>
             <div class="preview-section-controls">
               <button class="preview-btn" onclick="moveSection('${sec.id}', 'up')" title="Mover Seção para Cima">▲</button>
