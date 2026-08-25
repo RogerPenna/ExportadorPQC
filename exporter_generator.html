@@ -2727,17 +2727,38 @@
     }
 
     // Helper to get correctly linked child records for a parent record
-    function getFilteredChildRecords(sec, parentRecord) {
+    function getFilteredChildRecords(sec, parentRecord, parentTableId = null) {
       if (!sec.records || sec.records.length === 0) return [];
       if (!parentRecord) return sec.records;
 
-      // 1. Try explicit linkColumn if set
-      if (sec.linkColumn && sec.linkColumn.trim() !== '') {
-        const matches = sec.records.filter(row => isRefMatch(row[sec.linkColumn], parentRecord));
-        if (matches.length > 0) return matches;
+      const pTableId = parentTableId || sec.parentTableId || 'Empresa';
+      const parentLower = pTableId.toLowerCase();
+
+      // 1. Search for columns explicitly matching the parent table name (e.g. "EmpresaRef", "RefEmpresa", "Empresa")
+      const parentLinkCols = (sec.columns || []).map(c => c.colId).filter(colId => {
+        const lower = colId.toLowerCase();
+        return lower.includes(parentLower) || lower === `ref${parentLower}` || lower === `${parentLower}ref`;
+      });
+
+      for (const colId of parentLinkCols) {
+        const matches = sec.records.filter(row => isRefMatch(row[colId], parentRecord));
+        if (matches.length > 0) {
+          sec.linkColumn = colId;
+          logDebug(`[Filtro] Seção '${sec.title}' (${sec.tableId}) auto-vinculada a ${pTableId} via '${colId}': ${matches.length} de ${sec.records.length} registros`);
+          return matches;
+        }
       }
 
-      // 2. Auto-detect link column by column names
+      // 2. Try explicit linkColumn if set and valid
+      if (sec.linkColumn && sec.linkColumn.trim() !== '') {
+        const matches = sec.records.filter(row => isRefMatch(row[sec.linkColumn], parentRecord));
+        if (matches.length > 0) {
+          logDebug(`[Filtro] Seção '${sec.title}' (${sec.tableId}) vinculada via '${sec.linkColumn}': ${matches.length} de ${sec.records.length} registros`);
+          return matches;
+        }
+      }
+
+      // 3. Auto-detect link column by searching column names for 'empresa', 'ref' or 'parent'
       const candidateCols = (sec.columns || []).map(c => c.colId).filter(colId => {
         const lower = colId.toLowerCase();
         return lower.includes('empresa') || lower.includes('ref') || lower.includes('parent');
@@ -2747,12 +2768,12 @@
         const matches = sec.records.filter(row => isRefMatch(row[colId], parentRecord));
         if (matches.length > 0) {
           sec.linkColumn = colId;
-          logDebug(`Auto-detectado linkColumn para ${sec.title}: ${colId}`);
+          logDebug(`[Filtro] Seção '${sec.title}' (${sec.tableId}) auto-vinculada via candidato '${colId}': ${matches.length} de ${sec.records.length} registros`);
           return matches;
         }
       }
 
-      // 3. Fallback check across all columns
+      // 4. Fallback check across all columns
       if (sec.records.length > 0) {
         const firstRow = sec.records[0];
         for (const colId of Object.keys(firstRow)) {
@@ -2760,32 +2781,33 @@
           const matches = sec.records.filter(row => isRefMatch(row[colId], parentRecord));
           if (matches.length > 0) {
             sec.linkColumn = colId;
-            logDebug(`Auto-detectado linkColumn por varredura para ${sec.title}: ${colId}`);
+            logDebug(`[Filtro] Seção '${sec.title}' (${sec.tableId}) auto-vinculada por varredura via '${colId}': ${matches.length} de ${sec.records.length} registros`);
             return matches;
           }
         }
       }
 
-      // If child section fails to match any parent reference, return empty array to prevent 1,000+ card DOM overflow
-      logDebug(`Aviso: Nenhum registro da seção ${sec.title} (${sec.tableId}) correspondeu ao registro pai.`);
+      logDebug(`[Filtro] AVISO: Nenhum registro da seção ${sec.title} (${sec.tableId}) correspondeu ao registro pai (${pTableId}).`);
       return [];
     }
 
     // Recursive records renderer
-    function renderSectionRecordsHTML(sec, parentRecord) {
+    function renderSectionRecordsHTML(sec, parentRecord, parentTableId = null) {
       const activeCols = sec.columns.filter(c => c.enabled);
       
       let filteredRecords = [];
       if (parentRecord) {
         // Child section: filter records linked to parent
-        filteredRecords = getFilteredChildRecords(sec, parentRecord);
+        filteredRecords = getFilteredChildRecords(sec, parentRecord, parentTableId);
       } else if (activeGristRecord && activeGristRecord.id) {
         // Root section: filter by selected Grist record if ID matches
         const matched = (sec.records || []).filter(row => String(row.id) === String(activeGristRecord.id));
         filteredRecords = matched.length > 0 ? matched : (sec.records || []).slice(0, 1);
+        logDebug(`[Filtro Raiz] Seção principal '${sec.title}' (${sec.tableId}): ${filteredRecords.length} de ${sec.records.length} registros`);
       } else {
         // Root section without active record: take 1 record default
         filteredRecords = (sec.records || []).slice(0, 1);
+        logDebug(`[Filtro Raiz] Seção principal '${sec.title}' (${sec.tableId}): exibindo 1º registro de ${sec.records.length}`);
       }
 
       // Apply maxRecords limit (0 = unlimited for child sections; for root section default to 1)
@@ -2797,7 +2819,7 @@
       const isCapped = filteredRecords.length > cappedRecords.length;
       
       const recordsHtml = cappedRecords.map((row, rIdx) => {
-        const childrenHtml = sec.children.map(child => renderSectionRecordsHTML(child, row)).join('');
+        const childrenHtml = sec.children.map(child => renderSectionRecordsHTML(child, row, sec.tableId)).join('');
         const pageBreakClass = (sec.pageBreak === 'always' && rIdx > 0) ? ' page-break-before-record' : '';
 
         syncLayoutItems(sec);
