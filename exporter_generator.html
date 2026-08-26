@@ -745,12 +745,13 @@
       <!-- Template Selector -->
       <div class="form-group" style="background-color: rgba(59, 130, 246, 0.05); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 8px;">
         <label for="template-select" style="color: #60a5fa; font-weight: 700;">Modelo de Relatório Ativo</label>
-        <div style="display: flex; gap: 8px; margin-top: 4px;">
+        <div style="display: flex; gap: 6px; margin-top: 4px;">
           <select id="template-select" onchange="onTemplateSelectChange()" style="flex-grow: 1;">
             <option value="">Carregando modelos...</option>
           </select>
-          <button class="btn-action" style="padding: 8px 12px; font-size: 0.8rem; background: var(--accent);" onclick="createNewTemplate()" title="Criar Novo Modelo">+</button>
-          <button class="btn-action" style="padding: 8px 12px; font-size: 0.8rem; background: var(--danger);" onclick="deleteTemplate()" title="Excluir Modelo Ativo">✕</button>
+          <button class="btn-action" style="padding: 8px 10px; font-size: 0.8rem; background: var(--accent);" onclick="createNewTemplate()" title="Criar Novo Modelo">+</button>
+          <button class="btn-action" style="padding: 8px 10px; font-size: 0.8rem; background: #0284c7;" onclick="renameActiveTemplate()" title="Renomear Modelo Ativo">✏️</button>
+          <button class="btn-action" style="padding: 8px 10px; font-size: 0.8rem; background: var(--danger);" onclick="deleteTemplate()" title="Excluir Modelo Ativo">✕</button>
         </div>
       </div>
 
@@ -1766,17 +1767,27 @@
       
       select.innerHTML = records.map(r => {
         let name = r[nameKey] || r.Nome || r.nome || r.Title || r.title || r.Modelo || r.modelo || r.Name || r.name;
+        
+        if (name && (String(name).trim() === 'Carregando modelos...' || String(name).trim() === 'Carregando modelos')) {
+          name = null;
+        }
+
         if (!name && r[configKey]) {
           try {
             const parsed = typeof r[configKey] === 'string' ? JSON.parse(r[configKey]) : r[configKey];
             if (parsed && (parsed.title || parsed.name)) {
-              name = parsed.title || parsed.name;
+              const pTitle = String(parsed.title || parsed.name).trim();
+              if (pTitle !== 'Carregando modelos...' && pTitle !== 'Carregando modelos') {
+                name = pTitle;
+              }
             }
           } catch(e) {}
         }
+        
         if (!name || String(name).trim() === '') {
           name = `Modelo #${r.id}`;
         }
+
         const isSelected = (selectedId !== undefined && selectedId !== null) && String(r.id) === String(selectedId) ? 'selected' : '';
         return `<option value="${r.id}" ${isSelected}>${name}</option>`;
       }).join('');
@@ -1785,6 +1796,52 @@
         select.value = String(selectedId);
       }
       select.disabled = false;
+    }
+
+    async function renameActiveTemplate() {
+      if (!currentConfigRecord) {
+        alert("Nenhum modelo ativo selecionado para renomear.");
+        return;
+      }
+
+      const select = document.getElementById('template-select');
+      const currentName = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex].text : `Modelo #${currentConfigRecord.id}`;
+      
+      const newName = prompt(`Digite o novo nome para o modelo:`, currentName);
+      if (!newName || String(newName).trim() === '' || newName.trim() === currentName) return;
+
+      const cleanName = newName.trim();
+      logDebug(`Renomeando modelo ID #${currentConfigRecord.id} para "${cleanName}"...`);
+      try {
+        const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
+
+        let updatedConfig = {};
+        const jsonString = currentConfigRecord[configKey];
+        if (jsonString) {
+          try {
+            updatedConfig = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+          } catch(e) {}
+        }
+        updatedConfig.title = cleanName;
+
+        const updateFields = {
+          [configKey]: JSON.stringify(updatedConfig)
+        };
+        if (nameKey) {
+          updateFields[nameKey] = cleanName;
+        }
+
+        await grist.docApi.applyUserActions([
+          ['UpdateRecord', 'Exportador', currentConfigRecord.id, updateFields]
+        ]);
+
+        logDebug(`Modelo ID #${currentConfigRecord.id} renomeado para "${cleanName}".`);
+        await loadConfigFromExportadorTable();
+      } catch (err) {
+        logDebug(`Erro ao renomear modelo: ${err.message}`);
+        alert(`Erro ao renomear modelo: ${err.message}`);
+      }
     }
 
     async function loadConfigFromRecord(record) {
@@ -4410,6 +4467,8 @@
     window.updatePreview = updatePreview;
     window.saveConfigToGrist = saveConfigToGrist;
     window.restoreBackupFromGrist = restoreBackupFromGrist;
+    window.renameActiveTemplate = renameActiveTemplate;
+    window.copyDebugLogText = copyDebugLogText;
     window.exportPDF = exportPDF;
     window.exportExcel = exportExcel;
 
