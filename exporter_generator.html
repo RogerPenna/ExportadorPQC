@@ -1634,7 +1634,15 @@
           updatePreview();
         }
         alert("Backup restaurado com sucesso!");
-      }    async function loadConfigFromExportadorTable() {
+      } catch (err) {
+        logDebug(`Erro ao restaurar backup: ${err.message}`);
+        alert(`Erro ao restaurar backup: ${err.message}`);
+      } finally {
+        isSaving = false;
+      }
+    }
+
+    async function loadConfigFromExportadorTable() {
       try {
         logDebug("Buscando registros da tabela Exportador...");
         
