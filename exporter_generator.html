@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Gerador de Relatórios PQC-RS (Debug)</title>
+  <title>Gerador de Relatórios (Debug)</title>
   <!-- Grist Custom Widget API -->
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <!-- SheetJS for Excel export -->
@@ -737,7 +737,7 @@
   <!-- Left Config Panel -->
   <div class="left-panel">
     <div class="panel-header">
-      <h1>Gerador de Relatórios PQC (Hierárquico)</h1>
+      <h1>Gerador de Relatórios</h1>
       <p>Configure relações de árvore aninhadas e exporte</p>
     </div>
 
@@ -757,12 +757,12 @@
       <!-- Global Info -->
       <div class="form-group">
         <label for="report-title-input">Título Geral</label>
-        <input type="text" id="report-title-input" value="Relatório Consolidado PQC" oninput="updatePreview()">
+        <input type="text" id="report-title-input" value="Relatório Consolidado" oninput="updatePreview()">
       </div>
 
       <div class="form-group">
         <label for="report-subtitle-input">Subtítulo</label>
-        <input type="text" id="report-subtitle-input" value="Programa da Qualidade Contábil" oninput="updatePreview()">
+        <input type="text" id="report-subtitle-input" value="" oninput="updatePreview()">
       </div>
 
       <div class="form-group flex-row" style="display: flex; gap: 10px;">
@@ -899,12 +899,12 @@
   <div class="right-panel">
     <div class="paper-container" id="pdf-preview-sheet">
       <div class="report-header" id="pdf-header">
-        <div class="report-title" id="pdf-title">Relatório Consolidado PQC</div>
-        <div class="report-subtitle" id="pdf-subtitle">Programa da Qualidade Contábil</div>
+        <div class="report-title" id="pdf-title">Relatório Consolidado</div>
+        <div class="report-subtitle" id="pdf-subtitle"></div>
       </div>
       <div class="report-meta">
         <div>Data: <span id="pdf-date">19/08/2026</span></div>
-        <div>PQC RS</div>
+        <div>Relatório</div>
       </div>
       
       <div id="pdf-sections-content">
@@ -1390,8 +1390,8 @@
           if (jsonString) {
             const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
             if (config && config.hierarchy) {
-              document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado PQC';
-              document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
+              document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado';
+              document.getElementById('report-subtitle-input').value = config.subtitle || '';
               document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
               document.getElementById('font-size-select').value = config.fontSize || '9pt';
               document.getElementById('page-margin-select').value = config.pageMargin || '5mm';
@@ -1626,8 +1626,8 @@
         
         const config = typeof backupJsonString === 'string' ? JSON.parse(backupJsonString) : backupJsonString;
         if (config && config.hierarchy) {
-          document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado PQC';
-          document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
+          document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado';
+          document.getElementById('report-subtitle-input').value = config.subtitle || '';
           document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
           document.getElementById('font-size-select').value = config.fontSize || '9pt';
           
@@ -1655,7 +1655,6 @@
         logDebug(`Tabela Exportador lida: ${records.length} registros encontrados.`);
         
         if (records.length > 0) {
-          // If we had a previously selected config record ID, preserve it
           const previousId = currentConfigRecord ? currentConfigRecord.id : null;
           const matchedRecord = records.find(r => String(r.id) === String(previousId));
           
@@ -1665,8 +1664,8 @@
         } else {
           logDebug("Tabela Exportador está vazia. Criando linha de configuração padrão...");
           const defaultJson = JSON.stringify({
-            title: 'Relatório Consolidado PQC',
-            subtitle: 'Programa da Qualidade Contábil',
+            title: 'Relatório Consolidado',
+            subtitle: '',
             themeColor: '#3b82f6',
             fontSize: '9pt',
             hierarchy: reportSections
@@ -1681,7 +1680,6 @@
           await grist.docApi.applyUserActions([
             ['AddRecord', 'Exportador', null, { [configKey]: defaultJson }]
           ]);
-          // Recarrega registros para capturar a linha criada
           await loadConfigFromExportadorTable();
         }
       } catch (err) {
@@ -1693,20 +1691,39 @@
       const select = document.getElementById('template-select');
       if (!select) return;
       
-      const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
-      const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
+      if (!records || !Array.isArray(records) || records.length === 0) {
+        select.innerHTML = `<option value="">(Nenhum modelo)</option>`;
+        return;
+      }
+
+      let configKey = 'JSONExportador';
+      let nameKey = 'Nome';
+      try {
+        configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
+      } catch(e) {}
       
       select.innerHTML = records.map(r => {
-        let name = r[nameKey] || `Modelo #${r.id}`;
-        if (!r[nameKey] && r[configKey]) {
+        let name = r[nameKey] || r.Nome || r.nome || r.Title || r.title || r.Modelo || r.modelo || r.Name || r.name;
+        if (!name && r[configKey]) {
           try {
             const parsed = typeof r[configKey] === 'string' ? JSON.parse(r[configKey]) : r[configKey];
-            if (parsed && parsed.title) name = parsed.title;
+            if (parsed && (parsed.title || parsed.name)) {
+              name = parsed.title || parsed.name;
+            }
           } catch(e) {}
         }
-        const isSelected = String(r.id) === String(selectedId) ? 'selected' : '';
+        if (!name || String(name).trim() === '') {
+          name = `Modelo #${r.id}`;
+        }
+        const isSelected = (selectedId !== undefined && selectedId !== null) && String(r.id) === String(selectedId) ? 'selected' : '';
         return `<option value="${r.id}" ${isSelected}>${name}</option>`;
       }).join('');
+
+      if (selectedId !== undefined && selectedId !== null) {
+        select.value = String(selectedId);
+      }
+      select.disabled = false;
     }
 
     async function loadConfigFromRecord(record) {
@@ -1716,11 +1733,16 @@
         const jsonString = record[configKey];
         logDebug(`Configuração da linha #${record.id} carregada.`);
         
+        const select = document.getElementById('template-select');
+        if (select && select.value !== String(record.id)) {
+          select.value = String(record.id);
+        }
+
         if (jsonString) {
           const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
           if (config && config.hierarchy) {
-            document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado PQC';
-            document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
+            document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado';
+            document.getElementById('report-subtitle-input').value = config.subtitle || '';
             document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
             document.getElementById('font-size-select').value = config.fontSize || '9pt';
             
@@ -1750,11 +1772,22 @@
       const select = document.getElementById('template-select');
       if (!select || !select.value) return;
       
-      const recordId = parseInt(select.value);
+      const recordId = parseInt(select.value, 10);
       logDebug(`Alternando para o modelo ID #${recordId}...`);
       try {
-        const fullRecord = await tableLens.fetchRecordById('Exportador', recordId);
+        let fullRecord = null;
+        try {
+          const rawData = await grist.docApi.fetchTable('Exportador');
+          const records = decodeColumnar(rawData);
+          fullRecord = records.find(r => String(r.id) === String(recordId));
+        } catch(e) {}
+
+        if (!fullRecord) {
+          fullRecord = await tableLens.fetchRecordById('Exportador', recordId);
+        }
+
         if (fullRecord) {
+          fullRecord._isFullRecordLoaded = true;
           currentConfigRecord = fullRecord;
           await loadConfigFromRecord(currentConfigRecord);
         }
@@ -1765,13 +1798,14 @@
 
     async function createNewTemplate() {
       const name = prompt("Digite o nome do novo modelo de relatório:");
-      if (!name) return;
+      if (!name || String(name).trim() === '') return;
       
-      logDebug(`Criando novo modelo: "${name}"...`);
+      const cleanName = String(name).trim();
+      logDebug(`Criando novo modelo: "${cleanName}"...`);
       try {
         const defaultConfig = {
-          title: name,
-          subtitle: 'Programa da Qualidade Contábil',
+          title: cleanName,
+          subtitle: '',
           themeColor: '#3b82f6',
           fontSize: '9pt',
           hierarchy: [
@@ -1794,15 +1828,13 @@
         await grist.docApi.applyUserActions([
           ['AddRecord', 'Exportador', null, { 
             [configKey]: JSON.stringify(defaultConfig),
-            [nameKey]: name
+            [nameKey]: cleanName
           }]
         ]);
         
-        // Recarrega todos os registros e seleciona o mais novo (último id)
         const rawData = await grist.docApi.fetchTable('Exportador');
         const records = decodeColumnar(rawData);
         if (records.length > 0) {
-          // Sort by ID descending to find the newest
           records.sort((a, b) => b.id - a.id);
           currentConfigRecord = records[0];
           logDebug(`Novo modelo criado com ID #${currentConfigRecord.id}.`);
@@ -1817,7 +1849,7 @@
       if (!currentConfigRecord) return;
       
       const select = document.getElementById('template-select');
-      const name = select ? select.options[select.selectedIndex].text : `Modelo #${currentConfigRecord.id}`;
+      const name = select && select.selectedIndex >= 0 ? select.options[select.selectedIndex].text : `Modelo #${currentConfigRecord.id}`;
       
       if (!confirm(`Tem certeza que deseja excluir permanentemente o modelo "${name}"?`)) return;
       
@@ -1826,7 +1858,7 @@
         await grist.docApi.applyUserActions([
           ['RemoveRecord', 'Exportador', currentConfigRecord.id]
         ]);
-        currentConfigRecord = null; // Reseta seleção
+        currentConfigRecord = null;
         await loadConfigFromExportadorTable();
       } catch (err) {
         logDebug(`Erro ao excluir modelo: ${err.message}`);
