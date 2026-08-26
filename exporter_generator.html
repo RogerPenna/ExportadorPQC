@@ -870,8 +870,11 @@
 
       <!-- Visual Debug Panel -->
       <div class="form-group">
-        <label>Status e Depuração Visual</label>
-        <div id="screen-debug-log" style="background-color: #000; color: #00ff00; font-family: monospace; font-size: 0.7rem; padding: 10px; max-height: 120px; overflow-y: auto; border-radius: 6px; border: 1px solid var(--border-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <label style="margin: 0;">Status e Depuração Visual</label>
+          <button onclick="copyDebugLogText()" style="background: none; border: none; color: #60a5fa; font-size: 0.75rem; cursor: pointer; text-decoration: underline;" title="Copiar todo o log de depuração">📋 Copiar Log</button>
+        </div>
+        <div id="screen-debug-log" style="background-color: #000; color: #00ff00; font-family: monospace; font-size: 0.7rem; padding: 10px; max-height: 140px; overflow-y: auto; border-radius: 6px; border: 1px solid var(--border-color); user-select: text; -webkit-user-select: text;">
           <div>[INFO] Iniciando painel de depuração...</div>
         </div>
       </div>
@@ -1048,6 +1051,24 @@
         el.scrollTop = el.scrollHeight;
       }
       console.log(msg);
+    }
+
+    function copyDebugLogText() {
+      const el = document.getElementById('screen-debug-log');
+      if (el) {
+        const text = el.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          alert('Log de depuração copiado para a área de transferência!');
+        }).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          alert('Log de depuração copiado!');
+        });
+      }
     }
     
     // Flat mapping list of tables for quick checks
@@ -1647,14 +1668,39 @@
     }
 
     async function loadConfigFromExportadorTable() {
+      const select = document.getElementById('template-select');
       try {
-        logDebug("Buscando registros da tabela Exportador...");
+        logDebug("Buscando registros da tabela 'Exportador'...");
         
-        const rawData = await grist.docApi.fetchTable('Exportador');
+        let rawData = null;
+        try {
+          rawData = await grist.docApi.fetchTable('Exportador');
+        } catch (fetchErr) {
+          logDebug(`Tabela 'Exportador' não encontrada ou sem acesso: ${fetchErr.message}. Tentando criar a tabela no Grist...`);
+          
+          try {
+            await grist.docApi.applyUserActions([
+              ['AddTable', 'Exportador', [
+                { id: 'Nome', type: 'Text' },
+                { id: 'JSONExportador', type: 'Text' },
+                { id: 'Backup', type: 'Text' }
+              ]]
+            ]);
+            logDebug("Tabela 'Exportador' criada com sucesso no documento Grist!");
+            rawData = await grist.docApi.fetchTable('Exportador');
+          } catch (createErr) {
+            logDebug(`Aviso: Não foi possível ler/criar a tabela 'Exportador': ${createErr.message}. Certifique-se de que o nível de acesso do Widget é 'Full' (Acesso Total) no painel do Grist.`);
+            if (select) {
+              select.innerHTML = `<option value="">⚠️ Requer Nível de Acesso Full no Grist</option>`;
+            }
+            return;
+          }
+        }
+
         const records = decodeColumnar(rawData);
-        logDebug(`Tabela Exportador lida: ${records.length} registros encontrados.`);
+        logDebug(`Tabela Exportador lida: ${records ? records.length : 0} registros encontrados.`);
         
-        if (records.length > 0) {
+        if (records && records.length > 0) {
           const previousId = currentConfigRecord ? currentConfigRecord.id : null;
           const matchedRecord = records.find(r => String(r.id) === String(previousId));
           
@@ -1672,18 +1718,33 @@
           });
           
           let configKey = 'JSONExportador';
+          let nameKey = 'Nome';
           try {
             const schema = await tableLens.getTableSchema('Exportador', { mode: 'raw' });
             configKey = Object.keys(schema).find(k => k.toLowerCase() === 'jsonexportador') || 'JSONExportador';
+            nameKey = Object.keys(schema).find(k => k.toLowerCase() === 'nome') || 'Nome';
           } catch (e) {}
 
           await grist.docApi.applyUserActions([
-            ['AddRecord', 'Exportador', null, { [configKey]: defaultJson }]
+            ['AddRecord', 'Exportador', null, { 
+              [configKey]: defaultJson,
+              [nameKey]: 'Modelo Padrão'
+            }]
           ]);
-          await loadConfigFromExportadorTable();
+          
+          const rawDataNew = await grist.docApi.fetchTable('Exportador');
+          const recordsNew = decodeColumnar(rawDataNew);
+          if (recordsNew && recordsNew.length > 0) {
+            currentConfigRecord = recordsNew[0];
+            await populateTemplatesDropdown(recordsNew, currentConfigRecord.id);
+            await loadConfigFromRecord(currentConfigRecord);
+          }
         }
       } catch (err) {
-        logDebug(`Aviso ao carregar da tabela Exportador: ${err.message}.`);
+        logDebug(`Erro ao carregar da tabela Exportador: ${err.message}.`);
+        if (select && select.options.length <= 1) {
+          select.innerHTML = `<option value="">⚠️ Erro ao carregar modelos (${err.message})</option>`;
+        }
       }
     }
 
