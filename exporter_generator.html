@@ -742,6 +742,18 @@
     </div>
 
     <div class="panel-content">
+      <!-- Template Selector -->
+      <div class="form-group" style="background-color: rgba(59, 130, 246, 0.05); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 8px;">
+        <label for="template-select" style="color: #60a5fa; font-weight: 700;">Modelo de Relatório Ativo</label>
+        <div style="display: flex; gap: 8px; margin-top: 4px;">
+          <select id="template-select" onchange="onTemplateSelectChange()" style="flex-grow: 1;">
+            <option value="">Carregando modelos...</option>
+          </select>
+          <button class="btn-action" style="padding: 8px 12px; font-size: 0.8rem; background: var(--accent);" onclick="createNewTemplate()" title="Criar Novo Modelo">+</button>
+          <button class="btn-action" style="padding: 8px 12px; font-size: 0.8rem; background: var(--danger);" onclick="deleteTemplate()" title="Excluir Modelo Ativo">✕</button>
+        </div>
+      </div>
+
       <!-- Global Info -->
       <div class="form-group">
         <label for="report-title-input">Título Geral</label>
@@ -1622,53 +1634,22 @@
           updatePreview();
         }
         alert("Backup restaurado com sucesso!");
-      } catch (err) {
-        logDebug(`Erro ao restaurar backup: ${err.message}`);
-        alert(`Erro ao restaurar backup: ${err.message}`);
-      } finally {
-        isSaving = false;
-      }
-    }
-
-    async function loadConfigFromExportadorTable() {
+      }    async function loadConfigFromExportadorTable() {
       try {
         logDebug("Buscando registros da tabela Exportador...");
         
-        // Log das colunas existentes na tabela para fins de diagnóstico
-        try {
-          const schema = await tableLens.getTableSchema('Exportador', { mode: 'raw' });
-          logDebug("Colunas detectadas em 'Exportador': " + Object.keys(schema).join(", "));
-        } catch (e) {
-          logDebug("Não foi possível carregar o schema da tabela 'Exportador': " + e.message);
-        }
-
         const rawData = await grist.docApi.fetchTable('Exportador');
-        logDebug("Raw data recebido de Exportador: " + JSON.stringify(rawData));
         const records = decodeColumnar(rawData);
-        logDebug("Records decodificados de Exportador: " + JSON.stringify(records));
         logDebug(`Tabela Exportador lida: ${records.length} registros encontrados.`);
         
         if (records.length > 0) {
-          currentConfigRecord = records[0];
-          const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
-          const jsonString = currentConfigRecord[configKey];
-          logDebug(`Configuração da linha #${currentConfigRecord.id} encontrada na coluna '${configKey}'.`);
+          // If we had a previously selected config record ID, preserve it
+          const previousId = currentConfigRecord ? currentConfigRecord.id : null;
+          const matchedRecord = records.find(r => String(r.id) === String(previousId));
           
-          if (jsonString) {
-            const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
-            if (config && config.hierarchy) {
-              document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado PQC';
-              document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
-              document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
-              document.getElementById('font-size-select').value = config.fontSize || '9pt';
-              
-              reportSections = config.hierarchy;
-              sanitizeSections(reportSections);
-              await reloadAllSectionsData(reportSections);
-            }
-          } else {
-            logDebug(`A coluna '${configKey}' está vazia nesta linha.`);
-          }
+          currentConfigRecord = matchedRecord || records[0];
+          await populateTemplatesDropdown(records, currentConfigRecord.id);
+          await loadConfigFromRecord(currentConfigRecord);
         } else {
           logDebug("Tabela Exportador está vazia. Criando linha de configuração padrão...");
           const defaultJson = JSON.stringify({
@@ -1688,15 +1669,151 @@
           await grist.docApi.applyUserActions([
             ['AddRecord', 'Exportador', null, { [configKey]: defaultJson }]
           ]);
-          // Recarrega registros para capturar a linha criada com seu ID correspondente
-          const rawDataNew = await grist.docApi.fetchTable('Exportador');
-          const recordsNew = decodeColumnar(rawDataNew);
-          if (recordsNew.length > 0) {
-            currentConfigRecord = recordsNew[0];
+          // Recarrega registros para capturar a linha criada
+          await loadConfigFromExportadorTable();
+        }
+      } catch (err) {
+        logDebug(`Aviso ao carregar da tabela Exportador: ${err.message}.`);
+      }
+    }
+
+    async function populateTemplatesDropdown(records, selectedId) {
+      const select = document.getElementById('template-select');
+      if (!select) return;
+      
+      const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+      
+      select.innerHTML = records.map(r => {
+        let name = `Modelo #${r.id}`;
+        const jsonVal = r[configKey];
+        if (jsonVal) {
+          try {
+            const parsed = typeof jsonVal === 'string' ? JSON.parse(jsonVal) : jsonVal;
+            if (parsed && parsed.title) name = parsed.title;
+          } catch(e) {}
+        }
+        const isSelected = String(r.id) === String(selectedId) ? 'selected' : '';
+        return `<option value="${r.id}" ${isSelected}>${name}</option>`;
+      }).join('');
+    }
+
+    async function loadConfigFromRecord(record) {
+      if (!record) return;
+      try {
+        const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        const jsonString = record[configKey];
+        logDebug(`Configuração da linha #${record.id} carregada.`);
+        
+        if (jsonString) {
+          const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+          if (config && config.hierarchy) {
+            document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado PQC';
+            document.getElementById('report-subtitle-input').value = config.subtitle || 'Programa da Qualidade Contábil';
+            document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
+            document.getElementById('font-size-select').value = config.fontSize || '9pt';
+            
+            if (config.pageMargin) document.getElementById('page-margin-select').value = config.pageMargin;
+            if (config.subIndent) document.getElementById('subsection-indent-select').value = config.subIndent;
+            if (config.fieldPadding) document.getElementById('field-padding-select').value = config.fieldPadding;
+            if (config.cardPadding) document.getElementById('card-padding-select').value = config.cardPadding;
+            if (config.colGap) document.getElementById('col-gap-select').value = config.colGap;
+            if (document.getElementById('col-border-checkbox')) {
+              document.getElementById('col-border-checkbox').checked = config.showColBorder === true;
+            }
+            
+            reportSections = config.hierarchy;
+            sanitizeSections(reportSections);
+            await reloadAllSectionsData(reportSections);
+            await updateSectionsColumnsFromMetadata(reportSections);
+            renderSectionsManager();
+            updatePreview();
           }
         }
       } catch (err) {
-        logDebug(`Aviso ao carregar da tabela Exportador: ${err.message}. Certifique-se de que a tabela 'Exportador' e a coluna 'JSONExportador' existem no documento e que o Widget possui nível de acesso 'Full'.`);
+        logDebug(`Erro ao decodificar JSON do registro ID #${record.id}: ${err.message}`);
+      }
+    }
+
+    async function onTemplateSelectChange() {
+      const select = document.getElementById('template-select');
+      if (!select || !select.value) return;
+      
+      const recordId = parseInt(select.value);
+      logDebug(`Alternando para o modelo ID #${recordId}...`);
+      try {
+        const fullRecord = await tableLens.fetchRecordById('Exportador', recordId);
+        if (fullRecord) {
+          currentConfigRecord = fullRecord;
+          await loadConfigFromRecord(currentConfigRecord);
+        }
+      } catch (e) {
+        logDebug(`Erro ao alternar de modelo: ${e.message}`);
+      }
+    }
+
+    async function createNewTemplate() {
+      const name = prompt("Digite o nome do novo modelo de relatório:");
+      if (!name) return;
+      
+      logDebug(`Criando novo modelo: "${name}"...`);
+      try {
+        const defaultConfig = {
+          title: name,
+          subtitle: 'Programa da Qualidade Contábil',
+          themeColor: '#3b82f6',
+          fontSize: '9pt',
+          hierarchy: [
+            {
+              id: 'sec_' + Math.random().toString(36).substring(2, 9),
+              tableId: 'Empresa',
+              title: 'Empresa',
+              parentTableId: null,
+              linkColumn: '',
+              columns: [],
+              children: [],
+              records: []
+            }
+          ]
+        };
+
+        const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        
+        await grist.docApi.applyUserActions([
+          ['AddRecord', 'Exportador', null, { [configKey]: JSON.stringify(defaultConfig) }]
+        ]);
+        
+        // Recarrega todos os registros e seleciona o mais novo (último id)
+        const rawData = await grist.docApi.fetchTable('Exportador');
+        const records = decodeColumnar(rawData);
+        if (records.length > 0) {
+          // Sort by ID descending to find the newest
+          records.sort((a, b) => b.id - a.id);
+          currentConfigRecord = records[0];
+          logDebug(`Novo modelo criado com ID #${currentConfigRecord.id}.`);
+          await loadConfigFromExportadorTable();
+        }
+      } catch (err) {
+        logDebug(`Erro ao criar novo modelo: ${err.message}`);
+      }
+    }
+
+    async function deleteTemplate() {
+      if (!currentConfigRecord) return;
+      
+      const select = document.getElementById('template-select');
+      const name = select ? select.options[select.selectedIndex].text : `Modelo #${currentConfigRecord.id}`;
+      
+      if (!confirm(`Tem certeza que deseja excluir permanentemente o modelo "${name}"?`)) return;
+      
+      logDebug(`Excluindo modelo ID #${currentConfigRecord.id}...`);
+      try {
+        await grist.docApi.applyUserActions([
+          ['RemoveRecord', 'Exportador', currentConfigRecord.id]
+        ]);
+        currentConfigRecord = null; // Reseta seleção
+        await loadConfigFromExportadorTable();
+      } catch (err) {
+        logDebug(`Erro ao excluir modelo: ${err.message}`);
       }
     }
 
@@ -4237,6 +4354,9 @@
     window.onColumnDragOver = onColumnDragOver;
     window.onColumnDrop = onColumnDrop;
     window.onColumnDragEnd = onColumnDragEnd;
+    window.createNewTemplate = createNewTemplate;
+    window.deleteTemplate = deleteTemplate;
+    window.onTemplateSelectChange = onTemplateSelectChange;
   </script>
 </body>
 </html>
