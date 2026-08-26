@@ -1549,7 +1549,11 @@
       const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
       const backupKey = await getColumnIdByLabel('Exportador', 'Backup', null);
 
-      const updateFields = { [configKey]: jsonString };
+      const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
+      const updateFields = { 
+        [configKey]: jsonString,
+        [nameKey]: title
+      };
       
       if (backupKey) {
         const previousValue = currentConfigRecord[configKey] || "";
@@ -1690,13 +1694,13 @@
       if (!select) return;
       
       const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+      const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
       
       select.innerHTML = records.map(r => {
-        let name = `Modelo #${r.id}`;
-        const jsonVal = r[configKey];
-        if (jsonVal) {
+        let name = r[nameKey] || `Modelo #${r.id}`;
+        if (!r[nameKey] && r[configKey]) {
           try {
-            const parsed = typeof jsonVal === 'string' ? JSON.parse(jsonVal) : jsonVal;
+            const parsed = typeof r[configKey] === 'string' ? JSON.parse(r[configKey]) : r[configKey];
             if (parsed && parsed.title) name = parsed.title;
           } catch(e) {}
         }
@@ -1785,9 +1789,13 @@
         };
 
         const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
         
         await grist.docApi.applyUserActions([
-          ['AddRecord', 'Exportador', null, { [configKey]: JSON.stringify(defaultConfig) }]
+          ['AddRecord', 'Exportador', null, { 
+            [configKey]: JSON.stringify(defaultConfig),
+            [nameKey]: name
+          }]
         ]);
         
         // Recarrega todos os registros e seleciona o mais novo (último id)
