@@ -1441,6 +1441,11 @@
         if (!sec.colsLayout) sec.colsLayout = 1;
         if (!sec.pageBreak) sec.pageBreak = 'avoid';
 
+        if (sec.tableId && !gristTables.some(t => t.tableId.toLowerCase() === sec.tableId.toLowerCase())) {
+          gristTables.push({ tableId: sec.tableId, id: sec.tableId });
+          gristTables.sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
+        }
+
         // Migrate / initialize layoutItems
         if (!sec.layoutItems || sec.layoutItems.length === 0) {
           sec.layoutItems = (sec.columns || []).map(c => ({ type: 'column', colId: c.colId }));
@@ -1964,34 +1969,73 @@
     }
 
     async function fetchDocumentTables() {
-      let tables = [];
+      const tableMap = new Map();
+
+      // 1. Try tableLens.listAllTables() (the exact method from debug-widget)
+      try {
+        const allTables = await tableLens.listAllTables();
+        if (allTables && allTables.length > 0) {
+          allTables.forEach(t => {
+            const tid = t.id || t.tableId;
+            if (tid && typeof tid === 'string' && !tid.startsWith('_') && tid.toLowerCase() !== 'exportador') {
+              tableMap.set(tid.toLowerCase(), { tableId: tid, name: t.name || tid });
+            }
+          });
+        }
+      } catch (e) {
+        logDebug(`Aviso ao tentar tableLens.listAllTables: ${e.message}`);
+      }
+
+      // 2. Try native grist.docApi.fetchTable('_grist_Tables')
       try {
         const rawMeta = await grist.docApi.fetchTable('_grist_Tables');
         const decoded = decodeColumnar(rawMeta);
         if (decoded && decoded.length > 0) {
-          tables = decoded
-            .map(r => r.tableId)
-            .filter(t => t && typeof t === 'string' && !t.startsWith('_') && t.toLowerCase() !== 'exportador');
+          decoded.forEach(r => {
+            const tid = r.tableId || r.id;
+            if (tid && typeof tid === 'string' && !tid.startsWith('_') && tid.toLowerCase() !== 'exportador') {
+              if (!tableMap.has(tid.toLowerCase())) {
+                tableMap.set(tid.toLowerCase(), { tableId: tid, name: r.label || tid });
+              }
+            }
+          });
         }
       } catch (e) {
-        logDebug(`Aviso ao ler _grist_Tables: ${e.message}`);
+        logDebug(`Aviso ao tentar fetchTable(_grist_Tables): ${e.message}`);
       }
 
-      if (!tables || tables.length === 0) {
-        try {
-          const allTables = await tableLens.listAllTables();
-          if (allTables && allTables.length > 0) {
-            tables = allTables
-              .map(t => t.id)
-              .filter(t => t && typeof t === 'string' && !t.startsWith('_') && t.toLowerCase() !== 'exportador');
+      // 3. Try grist.docApi.listTables()
+      try {
+        if (grist.docApi && typeof grist.docApi.listTables === 'function') {
+          const res = await grist.docApi.listTables();
+          if (Array.isArray(res)) {
+            res.forEach(t => {
+              const tid = typeof t === 'string' ? t : (t.id || t.tableId);
+              if (tid && typeof tid === 'string' && !tid.startsWith('_') && tid.toLowerCase() !== 'exportador') {
+                if (!tableMap.has(tid.toLowerCase())) {
+                  tableMap.set(tid.toLowerCase(), { tableId: tid, name: tid });
+                }
+              }
+            });
           }
-        } catch (e) {
-          logDebug(`Aviso ao ler com tableLens: ${e.message}`);
         }
+      } catch (e) {
+        logDebug(`Aviso ao tentar grist.docApi.listTables: ${e.message}`);
       }
 
-      const uniqueSorted = Array.from(new Set(tables)).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
-      return uniqueSorted.map(t => ({ tableId: t, id: t }));
+      // Always include table IDs from current report sections
+      const collectFromSections = (sections) => {
+        sections.forEach(s => {
+          if (s.tableId && !tableMap.has(s.tableId.toLowerCase())) {
+            tableMap.set(s.tableId.toLowerCase(), { tableId: s.tableId, name: s.tableId });
+          }
+          if (s.children && s.children.length > 0) collectFromSections(s.children);
+        });
+      };
+      if (reportSections) collectFromSections(reportSections);
+
+      const uniqueSorted = Array.from(tableMap.values()).sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
+      return uniqueSorted;
     }
 
     async function loadGristMetadata() {
@@ -2090,11 +2134,16 @@
     }
 
     async function addRootSection(defaultTableId = '') {
-      const tableId = defaultTableId || (gristTables[0]?.tableId || '');
+      let tableId = defaultTableId || (gristTables[0]?.tableId || '');
       if (!tableId) {
-        alert("Nenhuma tabela encontrada neste documento Grist.");
-        return;
+        const userInput = prompt("Não foi possível listar as tabelas automaticamente (certifique-se de que o Widget possui nível de acesso 'Acesso Total / Full Access' no painel do Grist).\n\nDigite o ID ou NOME da tabela do seu documento que você deseja adicionar:");
+        if (!userInput || String(userInput).trim() === '') return;
+        tableId = String(userInput).trim();
+        if (!gristTables.some(t => t.tableId.toLowerCase() === tableId.toLowerCase())) {
+          gristTables.push({ tableId: tableId, id: tableId });
+        }
       }
+
       const newSec = createSectionObject(tableId, `Seção: ${tableId}`, null, true);
       reportSections.push(newSec);
       await loadSectionColumnsAndData(newSec);
@@ -2106,11 +2155,16 @@
       const parentSec = findSectionById(reportSections, parentSecId);
       if (!parentSec) return;
 
-      const defaultTab = gristTables[0]?.tableId || '';
+      let defaultTab = gristTables[0]?.tableId || '';
       if (!defaultTab) {
-        alert("Nenhuma tabela encontrada neste documento Grist.");
-        return;
+        const userInput = prompt("Digite o ID ou NOME da tabela para esta sub-seção:");
+        if (!userInput || String(userInput).trim() === '') return;
+        defaultTab = String(userInput).trim();
+        if (!gristTables.some(t => t.tableId.toLowerCase() === defaultTab.toLowerCase())) {
+          gristTables.push({ tableId: defaultTab, id: defaultTab });
+        }
       }
+
       const newSec = createSectionObject(defaultTab, `Sub-seção: ${defaultTab}`, parentSec.tableId);
       parentSec.children.push(newSec);
       await loadSectionColumnsAndData(newSec);
@@ -2388,13 +2442,20 @@
     let activeDrawerSectionId = null;
     let activePropsSectionId = null;
 
-    function openSectionPropsDrawer(secId) {
+    async function openSectionPropsDrawer(secId) {
       activePropsSectionId = secId;
       const sec = findSectionById(reportSections, secId);
       if (!sec) return;
 
       closeColumnsDrawer();
       closePrintDrawer();
+
+      try {
+        const freshTables = await fetchDocumentTables();
+        if (freshTables && freshTables.length > 0) {
+          gristTables = freshTables;
+        }
+      } catch(e) {}
 
       document.getElementById('section-props-title').innerText = `⚙️ ${sec.title || sec.tableId}`;
       renderSectionPropsBody(sec);
@@ -2461,19 +2522,40 @@
       updatePreview();
     }
 
+    function getSelectableTablesForSection(sec) {
+      const tableSet = new Set();
+
+      (gristTables || []).forEach(t => {
+        if (t && t.tableId) tableSet.add(t.tableId);
+      });
+
+      if (sec && sec.tableId) tableSet.add(sec.tableId);
+
+      const collectFromSections = (sections) => {
+        sections.forEach(s => {
+          if (s.tableId) tableSet.add(s.tableId);
+          if (s.children && s.children.length > 0) collectFromSections(s.children);
+        });
+      };
+      if (reportSections) collectFromSections(reportSections);
+
+      return Array.from(tableSet).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+    }
+
     function renderSectionPropsBody(sec) {
       const container = document.getElementById('section-props-body');
       if (!container) return;
 
       const isSubSection = sec.parentTableId !== null;
       const availableCondCols = getAvailableCondColumns(sec);
+      const selectableTables = getSelectableTablesForSection(sec);
 
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 14px;">
           <div class="form-group">
             <label style="font-weight: 700; color: #fff;">Tabela Grist</label>
             <select id="prop-table-${sec.id}" onchange="onSectionTableChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
-              ${gristTables.map(t => `<option value="${t.tableId}" ${t.tableId === sec.tableId ? 'selected' : ''}>${t.tableId}</option>`).join('')}
+              ${selectableTables.map(t => `<option value="${t}" ${t === sec.tableId ? 'selected' : ''}>${t}</option>`).join('')}
               <option value="__custom__">✏️ Outra Tabela (digitar ID)...</option>
             </select>
           </div>
