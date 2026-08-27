@@ -4786,38 +4786,224 @@
     function exportExcel() {
       const wb = XLSX.utils.book_new();
 
-      const exportTableFromTree = (sections) => {
-        sections.forEach(sec => {
-          const activeCols = sec.columns.filter(c => c.enabled);
-          const headers = activeCols.map(c => c.useLabel !== false ? c.label : c.colId);
-          const rows = sec.records.map(row => activeCols.map(c => {
-            let cellVal = row[c.colId];
-            if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
-              const helperColId = 'gristHelper_Display_' + c.colId;
-              if (row[helperColId] !== undefined) {
-                cellVal = row[helperColId];
-              }
-            }
-            return formatCellValue(cellVal, c.type);
-          }));
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
 
-          const sheetName = sec.title.replace(/[\[\]\*\?\/\\:]/g, '').substring(0, 30) || sec.tableId;
-          let ws = wb.Sheets[sheetName];
-          if (ws) {
-            const existingData = XLSX.utils.sheet_to_json(ws, { header: 1 });
-            ws = XLSX.utils.aoa_to_sheet([...existingData, ...rows]);
-            wb.Sheets[sheetName] = ws;
-          } else {
-            ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      const rootSec = reportSections[0];
+      if (!rootSec) {
+        alert("Nenhuma seção configurada para exportação.");
+        return;
+      }
+
+      let rootRecordsToProcess = [];
+      if (isSingleMode) {
+        if (rootSec.records && rootSec.records.length > 0) {
+          let chosen = null;
+          if (activeGristRecord && activeGristRecord.id) {
+            chosen = rootSec.records.find(row => String(row.id) === String(activeGristRecord.id));
+          }
+          if (!chosen) {
+            if (currentRootRecordIndex >= 0 && currentRootRecordIndex < rootSec.records.length) {
+              chosen = rootSec.records[currentRootRecordIndex];
+            } else {
+              chosen = rootSec.records[0];
+            }
+          }
+          rootRecordsToProcess = [chosen];
+        }
+      } else {
+        rootRecordsToProcess = rootSec.records || [];
+      }
+
+      if (rootRecordsToProcess.length === 0) {
+        alert("Nenhum registro encontrado para exportar.");
+        return;
+      }
+
+      const cleanHtmlToPlainText = (htmlStr) => {
+        if (typeof htmlStr !== 'string') return String(htmlStr || '');
+        let str = htmlStr.replace(/<br\s*\/?>/gi, '\n');
+        str = str.replace(/<\/p>/gi, '\n');
+        str = str.replace(/<\/li>/gi, '\n');
+        str = str.replace(/<[^>]+>/g, '');
+        str = str.replace(/&nbsp;/gi, ' ');
+        str = str.replace(/&amp;/gi, '&');
+        str = str.replace(/&lt;/gi, '<');
+        str = str.replace(/&gt;/gi, '>');
+        str = str.replace(/&quot;/gi, '"');
+        return str.trim();
+      };
+
+      const formatJsonForExcel = (rawVal, colMeta) => {
+        const parsed = parseJsonValue(rawVal);
+        if (!parsed) return cleanHtmlToPlainText(rawVal);
+
+        if (colMeta && colMeta.jsonTemplate) {
+          const renderedHtml = formatJsonCellValue(rawVal, colMeta.jsonTemplate);
+          return cleanHtmlToPlainText(renderedHtml);
+        }
+
+        if (Array.isArray(parsed)) {
+          const isObjArray = parsed.every(item => typeof item === 'object' && item !== null);
+          if (isObjArray) {
+            return parsed.map((item, idx) => {
+              const pairs = Object.entries(item).map(([k, v]) => `${k}: ${v}`).join(' | ');
+              return `[${idx + 1}] ${pairs}`;
+            }).join('\n');
+          }
+          return parsed.map(item => String(item)).join('\n');
+        }
+
+        if (typeof parsed === 'object') {
+          const lines = [];
+          Object.entries(parsed).forEach(([k, v]) => {
+            if (typeof v === 'object' && v !== null) {
+              const subStr = Object.entries(v).map(([sk, sv]) => `${sk}: ${sv}`).join(' | ');
+              lines.push(`${k}: ${subStr}`);
+            } else {
+              lines.push(`${k}: ${v}`);
+            }
+          });
+          return lines.join('\n');
+        }
+
+        return String(rawVal);
+      };
+
+      const processCellForExcel = (row, col) => {
+        let cellVal = row[col.colId];
+        const helperColId = 'gristHelper_Display_' + col.colId;
+
+        if (col.refTargetCol && col.refTargetTable) {
+          cellVal = resolveByRefTarget(row, rootSec, col);
+        } else if (col.type && (col.type.startsWith('Ref:') || col.type.startsWith('RefList:'))) {
+          cellVal = resolveRefDisplayValue(cellVal, col.type, col);
+        } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
+          cellVal = row[helperColId];
+        }
+
+        if (cellVal === undefined || cellVal === null) return '';
+
+        if (col.renderAsJson || (typeof cellVal === 'string' && /^\s*[\{\[]/.test(cellVal.trim()) && parseJsonValue(cellVal) !== null)) {
+          return formatJsonForExcel(cellVal, col);
+        }
+
+        if (col.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()))) {
+          return cleanHtmlToPlainText(cellVal);
+        }
+
+        if (typeof cellVal === 'boolean' || col.type === 'Bool') {
+          return cellVal ? 'SIM' : 'NÃO';
+        }
+
+        if (typeof cellVal === 'number') {
+          return cellVal;
+        }
+
+        if (typeof cellVal === 'string') {
+          const trimmed = cellVal.trim();
+          if (!isNaN(Number(trimmed)) && trimmed !== '' && !trimmed.startsWith('0') && trimmed.length < 12) {
+            return Number(trimmed);
+          }
+          return cleanHtmlToPlainText(trimmed);
+        }
+
+        return String(cellVal);
+      };
+
+      const getParentName = (parentRec) => {
+        if (!parentRec) return '';
+        return parentRec.Nome_da_Empresa || parentRec.Nome || parentRec.Title || parentRec.Name || parentRec.Razao_Social || `Empresa #${parentRec.id}`;
+      };
+
+      const sheetsMap = new Map();
+
+      const collectSectionData = (sec, recordsToProcess, parentRecord = null) => {
+        const activeCols = sec.columns.filter(c => c.enabled !== false);
+        if (activeCols.length === 0) return;
+
+        const isSubSection = parentRecord !== null;
+        const sheetKey = sec.tableId || sec.id;
+        const sheetTitle = (sec.title || sec.tableId).replace(/[\[\]\*\?\/\\:]/g, '').substring(0, 30);
+
+        if (!sheetsMap.has(sheetKey)) {
+          const headers = [];
+          if (isSubSection) {
+            headers.push('Empresa (Vínculo)');
+          }
+          activeCols.forEach(c => {
+            headers.push(c.customLabel || (c.useLabel !== false ? c.label : c.colId));
+          });
+          sheetsMap.set(sheetKey, { title: sheetTitle, isSubSection: isSubSection, headers: headers, rows: [] });
+        }
+
+        const sheetData = sheetsMap.get(sheetKey);
+
+        recordsToProcess.forEach(row => {
+          if (!evaluateSectionCondition(sec, parentRecord || row)) return;
+
+          const rowData = [];
+          if (isSubSection) {
+            rowData.push(getParentName(parentRecord));
           }
 
-          exportTableFromTree(sec.children);
+          activeCols.forEach(c => {
+            rowData.push(processCellForExcel(row, c));
+          });
+
+          sheetData.rows.push(rowData);
+
+          if (sec.children && sec.children.length > 0) {
+            sec.children.forEach(childSec => {
+              const childRecords = getFilteredChildRecords(childSec, row, sec.tableId);
+              if (childRecords && childRecords.length > 0) {
+                collectSectionData(childSec, childRecords, row);
+              }
+            });
+          }
         });
       };
 
-      exportTableFromTree(reportSections);
-      XLSX.writeFile(wb, `Relatorio_Hierarquico_PQC.xlsx`);
+      collectSectionData(rootSec, rootRecordsToProcess, null);
+
+      let sheetIndex = 1;
+      sheetsMap.forEach((sheetData) => {
+        const aoa = [sheetData.headers, ...sheetData.rows];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        const colWidths = sheetData.headers.map((h, colIdx) => {
+          let maxLen = String(h).length;
+          sheetData.rows.forEach(r => {
+            const val = r[colIdx];
+            if (val !== undefined && val !== null) {
+              const lines = String(val).split('\n');
+              lines.forEach(l => {
+                if (l.length > maxLen) maxLen = l.length;
+              });
+            }
+          });
+          return { wch: Math.min(Math.max(maxLen + 3, 12), 60) };
+        });
+
+        ws['!cols'] = colWidths;
+
+        let sheetName = sheetData.title || `Aba_${sheetIndex}`;
+        if (wb.SheetNames.includes(sheetName)) {
+          sheetName = `${sheetName.substring(0, 26)}_${sheetIndex}`;
+        }
+
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        sheetIndex++;
+      });
+
+      let filename = 'Relatorio_Consolidado_PQC.xlsx';
+      if (isSingleMode && rootRecordsToProcess[0]) {
+        const companyName = getParentName(rootRecordsToProcess[0]).replace(/[^a-zA-Z0-9_\-]/g, '_');
+        filename = `Relatorio_${companyName}.xlsx`;
+      }
+
+      XLSX.writeFile(wb, filename);
+      logDebug(`Relatório Excel exportado com sucesso: '${filename}' (${sheetsMap.size} abas geradas).`);
     }
 
     function moveColInsideGroup(groupId, slotIdx, direction) {
