@@ -2974,6 +2974,10 @@
                   <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.renderAsHtml ? 'background: rgba(168, 85, 247, 0.2); color: #c084fc; border-color: #a855f7;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnHtmlMode('${col.colId}')" title="${col.renderAsHtml ? 'Renderizando como HTML Puro / Rich Text (clique para desativar)' : 'Renderizar como HTML Puro / Rich Text (clique para ativar)'}">
                     🌐 HTML
                   </button>
+                  <!-- Icon Render as JSON -->
+                  <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.renderAsJson ? 'background: rgba(236, 72, 153, 0.2); color: #f472b6; border-color: #ec4899;' : 'opacity: 0.4; color: #94a3b8;'}" onclick="toggleDrawerColumnJsonMode('${col.colId}')" title="${col.renderAsJson ? 'Renderizando/Formatando como JSON (clique para desativar)' : 'Renderizar/Formatar como JSON (clique para ativar)'}">
+                    { } JSON
+                  </button>
                   <!-- Icon Field Page Break -->
                   <button class="preview-btn" style="padding: 2px 4px; font-size: 0.72rem; ${col.pageBreak === 'page' ? 'background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: #f59e0b;' : (col.pageBreak === 'space' ? 'background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6;' : 'opacity: 0.4; color: #94a3b8;')}" onclick="cycleDrawerColumnPageBreak('${col.colId}')" title="${col.pageBreak === 'page' ? 'Quebra de Campo: Iniciar em Nova Página A4 (clique p/ alternar)' : (col.pageBreak === 'space' ? 'Quebra de Campo: Espaçamento de 24px (clique p/ alternar)' : 'Quebra de Campo: Sem Quebra (clique p/ alternar)')}">
                     ${col.pageBreak === 'page' ? '📄 Pág. Nova' : (col.pageBreak === 'space' ? '📏 Espaço' : '📄 Quebra')}
@@ -3387,6 +3391,59 @@
           col.pageBreak = 'none';
         }
         logDebug(`Quebra de página do campo '${col.colId}' alterada para: ${col.pageBreak}`);
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function toggleDrawerColumnJsonMode(colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const col = (sec.columns || []).find(c => c.colId === colId);
+      if (col) {
+        col.renderAsJson = !col.renderAsJson;
+        logDebug(`Campo '${colId}' renderAsJson setado para: ${col.renderAsJson}`);
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function promptCustomJsonTemplate(colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const col = (sec.columns || []).find(c => c.colId === colId);
+      if (!col) return;
+
+      const currentTpl = col.jsonTemplate || '';
+      const promptMsg = `Digite o template HTML customizado para o JSON do campo '${col.label || colId}':\n\n` +
+        `Use {{chave}} para cada campo do objeto JSON (ex: {{q1}}, {{q1_justification}}, {{q2}}, {{q2_justification}}).\n\n` +
+        `(Deixe em branco para utilizar a formatação automática inteligente)`;
+
+      const userInput = prompt(promptMsg, currentTpl);
+      if (userInput !== null) {
+        const trimmed = userInput.trim();
+        if (trimmed !== '') {
+          col.jsonTemplate = trimmed;
+          col.renderAsJson = true;
+          logDebug(`Template customizado do JSON salvo para '${colId}': ${trimmed}`);
+        } else {
+          delete col.jsonTemplate;
+          logDebug(`Template customizado do JSON removido para '${colId}'. Usando formatação automática.`);
+        }
+        openContextMenuColId = null;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function clearCustomJsonTemplate(colId) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec) return;
+      const col = (sec.columns || []).find(c => c.colId === colId);
+      if (col) {
+        delete col.jsonTemplate;
+        openContextMenuColId = null;
         renderDrawerColumns();
         updatePreview();
       }
@@ -3897,6 +3954,111 @@
       }
     }
 
+    function parseJsonValue(val) {
+      if (typeof val === 'object' && val !== null) return val;
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            return JSON.parse(trimmed);
+          } catch(e) {}
+        }
+      }
+      return null;
+    }
+
+    function formatJsonCellValue(rawVal, template = '') {
+      const obj = parseJsonValue(rawVal);
+      if (!obj) return String(rawVal || '');
+
+      const formatText = (text) => {
+        if (text === undefined || text === null) return '';
+        let str = String(text);
+        str = str.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        str = str.replace(/\n/g, '<br>');
+        return str;
+      };
+
+      if (template && String(template).trim() !== '') {
+        let result = template;
+        result = result.replace(/\{\{\s*([a-zA-Z0-9_\-]+)\s*\}\}/g, (match, key) => {
+          if (obj[key] !== undefined && obj[key] !== null) {
+            return formatText(obj[key]);
+          }
+          return '';
+        });
+        return result;
+      }
+
+      if (Array.isArray(obj)) {
+        return `<ul style="margin: 0; padding-left: 18px; line-height: 1.5;">` +
+          obj.map(item => `<li>${formatText(typeof item === 'object' ? JSON.stringify(item) : item)}</li>`).join('') +
+          `</ul>`;
+      }
+
+      const keys = Object.keys(obj);
+      if (keys.length === 0) return '<em>(JSON vazio)</em>';
+
+      const htmlBlocks = [];
+      const handledKeys = new Set();
+
+      keys.forEach(k => {
+        if (handledKeys.has(k)) return;
+
+        const justKey = `${k}_justification`;
+        const altJustKey = `justification_${k}`;
+
+        if (obj[justKey] !== undefined || obj[altJustKey] !== undefined) {
+          const scoreVal = obj[k];
+          const justVal = obj[justKey] !== undefined ? obj[justKey] : obj[altJustKey];
+
+          handledKeys.add(k);
+          handledKeys.add(justKey);
+          handledKeys.add(altJustKey);
+
+          const keyLabel = k.toUpperCase().replace('_', ' ');
+          const scoreBadge = (scoreVal !== undefined && scoreVal !== null) ?
+            `<span style="background: rgba(59, 130, 246, 0.12); color: #2563eb; font-weight: 700; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem; border: 1px solid rgba(59, 130, 246, 0.25);">Nota: ${scoreVal}%</span>` : '';
+
+          htmlBlocks.push(`
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-weight: 700; color: #1e293b; font-size: 0.83rem;">
+                <span>${keyLabel}</span>
+                ${scoreBadge}
+              </div>
+              <div style="font-size: 0.82rem; color: #334155; line-height: 1.5; white-space: normal;">
+                ${formatText(justVal)}
+              </div>
+            </div>
+          `);
+        } else if (!k.endsWith('_justification')) {
+          handledKeys.add(k);
+          const valStr = formatText(obj[k]);
+          const keyLabel = k.replace(/_/g, ' ');
+
+          htmlBlocks.push(`
+            <div style="margin-bottom: 6px; font-size: 0.82rem; line-height: 1.5;">
+              <strong style="color: #475569; text-transform: capitalize;">${keyLabel}:</strong>
+              <span style="color: #0f172a;">${valStr}</span>
+            </div>
+          `);
+        }
+      });
+
+      keys.forEach(k => {
+        if (!handledKeys.has(k)) {
+          htmlBlocks.push(`
+            <div style="margin-bottom: 6px; font-size: 0.82rem; line-height: 1.5;">
+              <strong style="color: #475569;">${k}:</strong>
+              <span style="color: #0f172a;">${formatText(obj[k])}</span>
+            </div>
+          `);
+        }
+      });
+
+      return htmlBlocks.join('');
+    }
+
     function formatChoiceValue(valStr, colMeta = null) {
       if (valStr === undefined || valStr === null || valStr === '') return '';
 
@@ -3988,6 +4150,14 @@
 
     function formatCellValue(val, type, colMeta = null) {
       if (val === undefined || val === null) return '';
+
+      // Check if configured or auto-detected JSON
+      const isConfiguredJson = colMeta && colMeta.renderAsJson === true;
+      const isAutoDetectedJson = typeof val === 'string' && /^\s*[\{\[]/.test(val.trim()) && parseJsonValue(val) !== null;
+
+      if (isConfiguredJson || isAutoDetectedJson) {
+        return formatJsonCellValue(val, colMeta?.jsonTemplate || '');
+      }
 
       // Check if value is Raw HTML / Rich Text (configured or auto-detected)
       const isConfiguredHtml = colMeta && (colMeta.renderAsHtml === true || colMeta.isHtml === true);
@@ -4383,7 +4553,8 @@
             const cellBold = condStyles.fontBold ? 'font-weight: bold !important;' : (c.widgetOptions?.fontBold ? 'font-weight: bold !important;' : '');
             const cellItalic = condStyles.fontItalic ? 'font-style: italic !important;' : (c.widgetOptions?.fontItalic ? 'font-style: italic !important;' : '');
             const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
-            const isRawHtml = c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
+            const isJson = c.renderAsJson || (typeof cellVal === 'string' && /^\s*[\{\[]/.test(cellVal.trim()) && parseJsonValue(cellVal) !== null);
+            const isRawHtml = c.renderAsHtml || isJson || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
             const hasCondBg = Boolean(condStyles.fillColor || c.widgetOptions?.fillColor);
 
             let fieldBreakCss = '';
@@ -4428,7 +4599,8 @@
 
         const hasOnlyRawHtml = activeCols.length > 0 && activeCols.every(c => {
           let cellVal = row[c.colId];
-          return c.renderAsHtml || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
+          const isJ = c.renderAsJson || (typeof cellVal === 'string' && /^\s*[\{\[]/.test(cellVal.trim()) && parseJsonValue(cellVal) !== null);
+          return c.renderAsHtml || isJ || (typeof cellVal === 'string' && /^\s*<(!DOCTYPE|html|table|div|h[1-6]|p|style|span)/i.test(cellVal.trim()));
         });
 
         const hideRecordHeader = sec.showRecordHeader === false || hasOnlyRawHtml;
@@ -4705,6 +4877,21 @@
           <div onclick="toggleDrawerColumnEnabled(${colIdx})" class="ctx-btn">
             <span>👁️</span> <span>${col.enabled !== false ? 'Ocultar no Relatório' : 'Exibir no Relatório'}</span>
           </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
+          <div onclick="toggleDrawerColumnJsonMode('${colId}')" class="ctx-btn" style="color: #f472b6;">
+            <span>{ }</span> <span>${col.renderAsJson ? 'Desativar Formatação JSON' : 'Ativar Formatação JSON'}</span>
+          </div>
+          ${col.renderAsJson ? `
+            <div onclick="promptCustomJsonTemplate('${colId}')" class="ctx-btn" style="color: #60a5fa;">
+              <span>✏️</span> <span>${col.jsonTemplate ? 'Editar Template do JSON' : 'Criar Template Customizado do JSON'}</span>
+            </div>
+            ${col.jsonTemplate ? `
+              <div onclick="clearCustomJsonTemplate('${colId}')" class="ctx-btn" style="color: #f87171;">
+                <span>🗑️</span> <span>Remover Template Customizado</span>
+              </div>
+            ` : ''}
+          ` : ''}
 
           <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 4px 0;"></div>
           <div onclick="promptRefTargetCol('${colId}')" class="ctx-btn" style="color: #60a5fa;">
@@ -4998,6 +5185,9 @@
     window.toggleDrawerColumnEnabled = toggleDrawerColumnEnabled;
     window.toggleDrawerColumnLabelMode = toggleDrawerColumnLabelMode;
     window.toggleDrawerColumnHtmlMode = toggleDrawerColumnHtmlMode;
+    window.toggleDrawerColumnJsonMode = toggleDrawerColumnJsonMode;
+    window.promptCustomJsonTemplate = promptCustomJsonTemplate;
+    window.clearCustomJsonTemplate = clearCustomJsonTemplate;
     window.cycleDrawerColumnPageBreak = cycleDrawerColumnPageBreak;
     window.toggleDrawerColumnGristStyle = toggleDrawerColumnGristStyle;
     window.onColumnDragStart = onColumnDragStart;
