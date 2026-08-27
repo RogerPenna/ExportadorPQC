@@ -994,6 +994,20 @@
         </span>
       </div>
 
+      <!-- Formato do Excel -->
+      <div style="background: rgba(15,23,42,0.6); border: 1px solid #334155; padding: 14px; border-radius: 8px;">
+        <label style="color: #34d399; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; display: block; margin-bottom: 8px;">
+          📗 Layout do Arquivo Excel (.xlsx)
+        </label>
+        <select id="excel-format-select" style="width: 100%; background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 8px 10px; border-radius: 6px; font-size: 9pt; font-weight: 600; outline: none;">
+          <option value="vertical" selected>📄 Relatório Executivo Vertical (Estilo Ficha / Grist)</option>
+          <option value="relational">📊 Banco de Dados (Abas Separadas por Tabela p/ Tabela Dinâmica)</option>
+        </select>
+        <span style="font-size: 7.5pt; color: #94a3b8; display: block; margin-top: 6px;">
+          Escolha entre a apresentação visual vertical em formato de relatório ou abas de tabela para análise.
+        </span>
+      </div>
+
       <!-- Métricas em Tempo Real -->
       <div style="background: rgba(15,23,42,0.6); border: 1px solid #334155; padding: 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;">
         <label style="color: #34d399; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; display: block;">
@@ -4784,6 +4798,199 @@
     }
 
     function exportExcel() {
+      const formatSelect = document.getElementById('excel-format-select');
+      const formatMode = formatSelect ? formatSelect.value : 'vertical';
+
+      if (formatMode === 'relational') {
+        exportExcelRelational();
+      } else {
+        exportExcelVertical();
+      }
+    }
+
+    function exportExcelVertical() {
+      const wb = XLSX.utils.book_new();
+
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
+
+      const rootSec = reportSections[0];
+      if (!rootSec) {
+        alert("Nenhuma seção configurada para exportação.");
+        return;
+      }
+
+      let rootRecordsToProcess = [];
+      if (isSingleMode) {
+        if (rootSec.records && rootSec.records.length > 0) {
+          let chosen = null;
+          if (activeGristRecord && activeGristRecord.id) {
+            chosen = rootSec.records.find(row => String(row.id) === String(activeGristRecord.id));
+          }
+          if (!chosen) {
+            if (currentRootRecordIndex >= 0 && currentRootRecordIndex < rootSec.records.length) {
+              chosen = rootSec.records[currentRootRecordIndex];
+            } else {
+              chosen = rootSec.records[0];
+            }
+          }
+          rootRecordsToProcess = [chosen];
+        }
+      } else {
+        rootRecordsToProcess = rootSec.records || [];
+      }
+
+      if (rootRecordsToProcess.length === 0) {
+        alert("Nenhum registro encontrado para exportar.");
+        return;
+      }
+
+      const getParentName = (parentRec) => {
+        if (!parentRec) return '';
+        return parentRec.Nome_da_Empresa || parentRec.Nome || parentRec.Title || parentRec.Name || parentRec.Razao_Social || `Empresa #${parentRec.id}`;
+      };
+
+      const cleanText = (val) => {
+        if (val === undefined || val === null) return '';
+        let str = String(val).replace(/<br\s*\/?>/gi, '\n');
+        str = str.replace(/<\/p>/gi, '\n');
+        str = str.replace(/<\/li>/gi, '\n');
+        str = str.replace(/<[^>]+>/g, '');
+        str = str.replace(/&nbsp;/gi, ' ');
+        str = str.replace(/&amp;/gi, '&');
+        str = str.replace(/&lt;/gi, '<');
+        str = str.replace(/&gt;/gi, '>');
+        return str.trim();
+      };
+
+      const rowsAOA = [];
+
+      const reportTitle = (document.getElementById('report-title-input')?.value || 'RELATÓRIO EXECUTIVO').toUpperCase();
+      const reportSubtitle = document.getElementById('report-subtitle-input')?.value || '';
+      const currentDateStr = new Date().toLocaleDateString('pt-BR');
+
+      rowsAOA.push(['========================================================================================']);
+      rowsAOA.push([`📊  ${reportTitle}`]);
+      if (reportSubtitle) rowsAOA.push([`    ${reportSubtitle}`]);
+      rowsAOA.push([`📅 Data da Exportação: ${currentDateStr}  |  Gerado via Grist Custom Exporter`]);
+      rowsAOA.push(['========================================================================================']);
+      rowsAOA.push([]);
+
+      rootRecordsToProcess.forEach((rootRow, rIdx) => {
+        const companyName = getParentName(rootRow);
+
+        rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
+        rowsAOA.push([`🏢 EMPRESA #${rIdx + 1}: ${companyName.toUpperCase()}`]);
+        rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
+        rowsAOA.push([]);
+
+        const renderSectionVertical = (sec, parentRow, depth = 0) => {
+          if (!evaluateSectionCondition(sec, parentRow)) return;
+
+          const indent = '   '.repeat(depth);
+          const secTitle = (sec.title || sec.tableId).toUpperCase();
+
+          if (depth > 0) {
+            rowsAOA.push([`${indent}--------------------------------------------------------------------------------`]);
+            rowsAOA.push([`${indent}📂 SUBSEÇÃO: ${secTitle}`]);
+            rowsAOA.push([`${indent}--------------------------------------------------------------------------------`]);
+          }
+
+          const activeCols = sec.columns.filter(c => c.enabled !== false);
+          const childRecords = depth === 0 ? [parentRow] : getFilteredChildRecords(sec, parentRow, sec.parentTableId);
+
+          if (!childRecords || childRecords.length === 0) {
+            rowsAOA.push([`${indent}   (Nenhum registro encontrado nesta subseção)`]);
+            rowsAOA.push([]);
+            return;
+          }
+
+          childRecords.forEach((row, recIdx) => {
+            if (depth > 0 && childRecords.length > 1) {
+              rowsAOA.push([`${indent}   📌 Registro #${recIdx + 1}`]);
+            }
+
+            activeCols.forEach(c => {
+              const label = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
+              let val = row[c.colId];
+              const helperColId = 'gristHelper_Display_' + c.colId;
+
+              if (c.refTargetCol && c.refTargetTable) {
+                val = resolveByRefTarget(row, sec, c);
+              } else if (c.type && (c.type.startsWith('Ref:') || c.type.startsWith('RefList:'))) {
+                val = resolveRefDisplayValue(val, c.type, c);
+              } else if (row[helperColId] !== undefined && row[helperColId] !== null && row[helperColId] !== '') {
+                val = row[helperColId];
+              }
+
+              let formattedVal = '';
+              if (c.renderAsJson || (typeof val === 'string' && /^\s*[\{\[]/.test(val.trim()) && parseJsonValue(val) !== null)) {
+                const parsed = parseJsonValue(val);
+                if (parsed && typeof parsed === 'object') {
+                  rowsAOA.push([`${indent}   • ${label}:`]);
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach(item => {
+                      rowsAOA.push([`${indent}       - ${cleanText(typeof item === 'object' ? JSON.stringify(item) : item)}`]);
+                    });
+                  } else {
+                    Object.entries(parsed).forEach(([k, v]) => {
+                      const keyName = k.replace(/_/g, ' ');
+                      rowsAOA.push([`${indent}       - ${keyName}: ${cleanText(v)}`]);
+                    });
+                  }
+                  return;
+                } else {
+                  formattedVal = cleanText(val);
+                }
+              } else if (typeof val === 'boolean' || c.type === 'Bool') {
+                formattedVal = val ? 'SIM' : 'NÃO';
+              } else {
+                formattedVal = cleanText(val);
+              }
+
+              rowsAOA.push([`${indent}   • ${label}:`, formattedVal]);
+            });
+
+            rowsAOA.push([]);
+
+            if (sec.children && sec.children.length > 0) {
+              sec.children.forEach(childSec => {
+                renderSectionVertical(childSec, row, depth + 1);
+              });
+            }
+          });
+        };
+
+        renderSectionVertical(rootSec, rootRow, 0);
+
+        rowsAOA.push([]);
+        rowsAOA.push([]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rowsAOA);
+
+      ws['!cols'] = [
+        { wch: 45 },
+        { wch: 75 }
+      ];
+
+      const sheetName = isSingleMode && rootRecordsToProcess[0]
+        ? getParentName(rootRecordsToProcess[0]).replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 30)
+        : 'Relatório Executivo';
+
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      let filename = 'Relatorio_Vertical_Executivo.xlsx';
+      if (isSingleMode && rootRecordsToProcess[0]) {
+        const companyName = getParentName(rootRecordsToProcess[0]).replace(/[^a-zA-Z0-9_\-]/g, '_');
+        filename = `Relatorio_Vertical_${companyName}.xlsx`;
+      }
+
+      XLSX.writeFile(wb, filename);
+      logDebug(`Relatório Executivo Vertical exportado com sucesso: '${filename}'.`);
+    }
+
+    function exportExcelRelational() {
       const wb = XLSX.utils.book_new();
 
       const scopeSelect = document.getElementById('report-scope-select');
