@@ -788,6 +788,26 @@
         </div>
       </div>
 
+      <!-- Navegador de Registros (Navegar Empresa por Empresa) -->
+      <div id="root-record-nav-container" class="form-group" style="background-color: rgba(59, 130, 246, 0.08); padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.25); margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label style="color: #60a5fa; font-weight: 700; margin: 0; font-size: 0.8rem;">
+            🏢 Navegar Registros / Empresas
+          </label>
+          <span id="root-record-count-badge" style="font-size: 0.72rem; color: #94a3b8; font-weight: 600;">(0 de 0)</span>
+        </div>
+        
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button id="prev-root-record-btn" class="btn-action" style="padding: 6px 10px; font-size: 0.85rem; background: #1e293b; border: 1px solid #475569;" onclick="navigateRootRecord(-1)" title="Registro/Empresa Anterior">◀</button>
+          
+          <select id="root-record-select" onchange="onRootRecordSelectChange()" style="flex-grow: 1; padding: 6px 8px; font-size: 0.82rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; text-overflow: ellipsis; overflow: hidden; width: 0;">
+            <option value="0">Carregando registros...</option>
+          </select>
+
+          <button id="next-root-record-btn" class="btn-action" style="padding: 6px 10px; font-size: 0.85rem; background: #1e293b; border: 1px solid #475569;" onclick="navigateRootRecord(1)" title="Próximo Registro/Empresa">▶</button>
+        </div>
+      </div>
+
       <!-- Global Info -->
       <div class="form-group">
         <label for="report-title-input">Título Geral</label>
@@ -1373,6 +1393,88 @@
     let activeGristRecord = null;
     let currentTableId = 'Exportador';
 
+    let currentRootRecordIndex = 0;
+
+    function getRecordDisplayName(r, idx) {
+      if (!r) return `Registro #${idx + 1}`;
+      const name = r.Nome_da_Empresa || r.Nome || r.Title || r.Name || r.Razao_Social || r.Descricao || r.Codigo;
+      if (name && String(name).trim() !== '') {
+        return String(name).trim();
+      }
+      return `Registro #${r.id || (idx + 1)}`;
+    }
+
+    function updateRootRecordNavigator() {
+      const container = document.getElementById('root-record-nav-container');
+      const select = document.getElementById('root-record-select');
+      const badge = document.getElementById('root-record-count-badge');
+      if (!container || !select) return;
+
+      const rootSec = reportSections[0];
+      if (!rootSec || !rootSec.records || rootSec.records.length === 0) {
+        select.innerHTML = '<option value="0">Sem registros carregados</option>';
+        if (badge) badge.innerText = '(0 de 0)';
+        return;
+      }
+
+      const records = rootSec.records;
+
+      if (activeGristRecord && activeGristRecord.id) {
+        const foundIdx = records.findIndex(r => String(r.id) === String(activeGristRecord.id));
+        if (foundIdx !== -1) {
+          currentRootRecordIndex = foundIdx;
+        }
+      }
+
+      if (currentRootRecordIndex < 0) currentRootRecordIndex = 0;
+      if (currentRootRecordIndex >= records.length) currentRootRecordIndex = records.length - 1;
+
+      select.innerHTML = records.map((r, idx) => {
+        const name = getRecordDisplayName(r, idx);
+        return `<option value="${idx}" ${idx === currentRootRecordIndex ? 'selected' : ''}>${idx + 1}. ${name}</option>`;
+      }).join('');
+
+      select.value = currentRootRecordIndex;
+
+      if (badge) {
+        badge.innerText = `(${currentRootRecordIndex + 1} de ${records.length})`;
+      }
+
+      const prevBtn = document.getElementById('prev-root-record-btn');
+      const nextBtn = document.getElementById('next-root-record-btn');
+      if (prevBtn) prevBtn.disabled = currentRootRecordIndex <= 0;
+      if (nextBtn) nextBtn.disabled = currentRootRecordIndex >= records.length - 1;
+    }
+
+    function navigateRootRecord(direction) {
+      const rootSec = reportSections[0];
+      if (!rootSec || !rootSec.records || rootSec.records.length === 0) return;
+
+      let newIdx = currentRootRecordIndex + direction;
+      if (newIdx < 0) newIdx = 0;
+      if (newIdx >= rootSec.records.length) newIdx = rootSec.records.length - 1;
+
+      currentRootRecordIndex = newIdx;
+      activeGristRecord = rootSec.records[currentRootRecordIndex];
+      updateRootRecordNavigator();
+      updatePreview();
+    }
+
+    function onRootRecordSelectChange() {
+      const select = document.getElementById('root-record-select');
+      if (!select) return;
+      const idx = parseInt(select.value, 10);
+      if (!isNaN(idx)) {
+        currentRootRecordIndex = idx;
+        const rootSec = reportSections[0];
+        if (rootSec && rootSec.records && rootSec.records[idx]) {
+          activeGristRecord = rootSec.records[idx];
+        }
+        updateRootRecordNavigator();
+        updatePreview();
+      }
+    }
+
     // Handle active record selection inside Grist
     grist.onRecord(async (record) => {
       if (!record || !record.id) {
@@ -1385,6 +1487,15 @@
       } catch (e) {}
 
       activeGristRecord = record;
+
+      const rootSec = reportSections[0];
+      if (rootSec && rootSec.records) {
+        const foundIdx = rootSec.records.findIndex(r => String(r.id) === String(record.id));
+        if (foundIdx !== -1) {
+          currentRootRecordIndex = foundIdx;
+        }
+      }
+      updateRootRecordNavigator();
 
       if (currentTableId !== 'Exportador') {
         logDebug(`Registro da tabela '${currentTableId}' selecionado: ID #${record.id} para filtragem.`);
@@ -2323,6 +2434,10 @@
       if (section.parentTableId && !section.linkColumn && section.columns.length > 0) {
         const parentRefCol = section.columns.find(c => c.colId.toLowerCase().includes('empresa') || c.colId.toLowerCase().includes('ref'));
         if (parentRefCol) section.linkColumn = parentRefCol.colId;
+      }
+
+      if (reportSections && section === reportSections[0]) {
+        updateRootRecordNavigator();
       }
     }
 
@@ -4134,14 +4249,23 @@
         // Child section: filter records linked to parent
         filteredRecords = getFilteredChildRecords(sec, parentRecord, parentTableId);
       } else if (isSingleMode) {
-        // Root section in Single mode: filter by selected Grist record if ID matches
-        if (activeGristRecord && activeGristRecord.id) {
-          const matched = (sec.records || []).filter(row => String(row.id) === String(activeGristRecord.id));
-          filteredRecords = matched.length > 0 ? matched : (sec.records || []).slice(0, 1);
+        if (sec.records && sec.records.length > 0) {
+          let chosen = null;
+          if (activeGristRecord && activeGristRecord.id) {
+            chosen = sec.records.find(row => String(row.id) === String(activeGristRecord.id));
+          }
+          if (!chosen) {
+            if (currentRootRecordIndex >= 0 && currentRootRecordIndex < sec.records.length) {
+              chosen = sec.records[currentRootRecordIndex];
+            } else {
+              chosen = sec.records[0];
+            }
+          }
+          filteredRecords = [chosen];
         } else {
-          filteredRecords = (sec.records || []).slice(0, 1);
+          filteredRecords = [];
         }
-        logDebug(`[Filtro Raiz 1 Empresa] Seção principal '${sec.title}' (${sec.tableId}): ${filteredRecords.length} de ${sec.records.length} registros`);
+        logDebug(`[Filtro Raiz 1 Empresa] Seção principal '${sec.title}' (${sec.tableId}): exibindo registro #${currentRootRecordIndex + 1} (${filteredRecords[0]?.id ? 'ID #' + filteredRecords[0].id : 'N/A'})`);
       } else {
         // Root section in Consolidated mode: render all records!
         filteredRecords = sec.records || [];
@@ -4796,6 +4920,9 @@
     }
 
     // Expose functions globally for HTML event handlers in ES Module scope
+    window.navigateRootRecord = navigateRootRecord;
+    window.onRootRecordSelectChange = onRootRecordSelectChange;
+    window.updateRootRecordNavigator = updateRootRecordNavigator;
     window.promptRefTargetCol = promptRefTargetCol;
     window.clearRefTargetCol = clearRefTargetCol;
     window.moveLayoutItemSteps = moveLayoutItemSteps;
