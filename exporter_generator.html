@@ -1000,11 +1000,11 @@
           📗 Layout do Arquivo Excel (.xlsx)
         </label>
         <select id="excel-format-select" style="width: 100%; background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 8px 10px; border-radius: 6px; font-size: 9pt; font-weight: 600; outline: none;">
-          <option value="vertical" selected>📄 Relatório Executivo Vertical (Estilo Ficha / Grist)</option>
-          <option value="relational">📊 Banco de Dados (Abas Separadas por Tabela p/ Tabela Dinâmica)</option>
+          <option value="vertical" selected>📄 Relatório Executivo Vertical por Abas (Estilo Ficha / Grist)</option>
+          <option value="relational">📊 Banco de Dados Relacional (Abas por Tabela p/ Tabela Dinâmica)</option>
         </select>
         <span style="font-size: 7.5pt; color: #94a3b8; display: block; margin-top: 6px;">
-          Escolha entre a apresentação visual vertical em formato de relatório ou abas de tabela para análise.
+          Escolha entre a apresentação visual vertical dividida em abas ou o banco de dados relacional para análise.
         </span>
       </div>
 
@@ -4863,51 +4863,43 @@
         return str.trim();
       };
 
-      const rowsAOA = [];
-
       const reportTitle = (document.getElementById('report-title-input')?.value || 'RELATÓRIO EXECUTIVO').toUpperCase();
       const reportSubtitle = document.getElementById('report-subtitle-input')?.value || '';
       const currentDateStr = new Date().toLocaleDateString('pt-BR');
 
-      rowsAOA.push(['========================================================================================']);
-      rowsAOA.push([`📊  ${reportTitle}`]);
-      if (reportSubtitle) rowsAOA.push([`    ${reportSubtitle}`]);
-      rowsAOA.push([`📅 Data da Exportação: ${currentDateStr}  |  Gerado via Grist Custom Exporter`]);
-      rowsAOA.push(['========================================================================================']);
-      rowsAOA.push([]);
+      const buildSectionVerticalSheet = (sec, depth = 0) => {
+        const rowsAOA = [];
+        const secTitle = (sec.title || sec.tableId).toUpperCase();
 
-      rootRecordsToProcess.forEach((rootRow, rIdx) => {
-        const companyName = getParentName(rootRow);
-
-        rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
-        rowsAOA.push([`🏢 EMPRESA #${rIdx + 1}: ${companyName.toUpperCase()}`]);
-        rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
+        rowsAOA.push(['========================================================================================']);
+        rowsAOA.push([`📊  ${reportTitle} - SEÇÃO: ${secTitle}`]);
+        if (reportSubtitle) rowsAOA.push([`    ${reportSubtitle}`]);
+        rowsAOA.push([`📅 Data da Exportação: ${currentDateStr}  |  Gerado via Grist Custom Exporter`]);
+        rowsAOA.push(['========================================================================================']);
         rowsAOA.push([]);
 
-        const renderSectionVertical = (sec, parentRow, depth = 0) => {
-          if (!evaluateSectionCondition(sec, parentRow)) return;
+        const activeCols = sec.columns.filter(c => c.enabled !== false);
+        const isRoot = depth === 0;
 
-          const indent = '   '.repeat(depth);
-          const secTitle = (sec.title || sec.tableId).toUpperCase();
+        rootRecordsToProcess.forEach((rootRow, rIdx) => {
+          const companyName = getParentName(rootRow);
 
-          if (depth > 0) {
-            rowsAOA.push([`${indent}--------------------------------------------------------------------------------`]);
-            rowsAOA.push([`${indent}📂 SUBSEÇÃO: ${secTitle}`]);
-            rowsAOA.push([`${indent}--------------------------------------------------------------------------------`]);
-          }
+          rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
+          rowsAOA.push([`🏢 EMPRESA #${rIdx + 1}: ${companyName.toUpperCase()}`]);
+          rowsAOA.push([`████████████████████████████████████████████████████████████████████████████████`]);
+          rowsAOA.push([]);
 
-          const activeCols = sec.columns.filter(c => c.enabled !== false);
-          const childRecords = depth === 0 ? [parentRow] : getFilteredChildRecords(sec, parentRow, sec.parentTableId);
+          const targetRecords = isRoot ? [rootRow] : getFilteredChildRecords(sec, rootRow, sec.parentTableId);
 
-          if (!childRecords || childRecords.length === 0) {
-            rowsAOA.push([`${indent}   (Nenhum registro encontrado nesta subseção)`]);
+          if (!targetRecords || targetRecords.length === 0) {
+            rowsAOA.push([`   (Nenhum registro nesta subseção para esta empresa)`]);
             rowsAOA.push([]);
             return;
           }
 
-          childRecords.forEach((row, recIdx) => {
-            if (depth > 0 && childRecords.length > 1) {
-              rowsAOA.push([`${indent}   📌 Registro #${recIdx + 1}`]);
+          targetRecords.forEach((row, recIdx) => {
+            if (!isRoot && targetRecords.length > 1) {
+              rowsAOA.push([`   📌 Registro #${recIdx + 1}`]);
             }
 
             activeCols.forEach(c => {
@@ -4923,62 +4915,58 @@
                 val = row[helperColId];
               }
 
-              let formattedVal = '';
               if (c.renderAsJson || (typeof val === 'string' && /^\s*[\{\[]/.test(val.trim()) && parseJsonValue(val) !== null)) {
                 const parsed = parseJsonValue(val);
                 if (parsed && typeof parsed === 'object') {
-                  rowsAOA.push([`${indent}   • ${label}:`]);
+                  rowsAOA.push([`   • ${label}:`]);
                   if (Array.isArray(parsed)) {
                     parsed.forEach(item => {
-                      rowsAOA.push([`${indent}       - ${cleanText(typeof item === 'object' ? JSON.stringify(item) : item)}`]);
+                      rowsAOA.push([`       - ${cleanText(typeof item === 'object' ? JSON.stringify(item) : item)}`]);
                     });
                   } else {
                     Object.entries(parsed).forEach(([k, v]) => {
                       const keyName = k.replace(/_/g, ' ');
-                      rowsAOA.push([`${indent}       - ${keyName}: ${cleanText(v)}`]);
+                      rowsAOA.push([`       - ${keyName}: ${cleanText(v)}`]);
                     });
                   }
                   return;
                 } else {
-                  formattedVal = cleanText(val);
+                  rowsAOA.push([`   • ${label}:`, cleanText(val)]);
                 }
               } else if (typeof val === 'boolean' || c.type === 'Bool') {
-                formattedVal = val ? 'SIM' : 'NÃO';
+                rowsAOA.push([`   • ${label}:`, val ? 'SIM' : 'NÃO']);
               } else {
-                formattedVal = cleanText(val);
+                rowsAOA.push([`   • ${label}:`, cleanText(val)]);
               }
-
-              rowsAOA.push([`${indent}   • ${label}:`, formattedVal]);
             });
 
             rowsAOA.push([]);
-
-            if (sec.children && sec.children.length > 0) {
-              sec.children.forEach(childSec => {
-                renderSectionVertical(childSec, row, depth + 1);
-              });
-            }
           });
-        };
 
-        renderSectionVertical(rootSec, rootRow, 0);
+          rowsAOA.push([]);
+        });
 
-        rowsAOA.push([]);
-        rowsAOA.push([]);
-      });
+        const ws = XLSX.utils.aoa_to_sheet(rowsAOA);
+        ws['!cols'] = [{ wch: 45 }, { wch: 75 }];
+        return ws;
+      };
 
-      const ws = XLSX.utils.aoa_to_sheet(rowsAOA);
+      let sheetIndex = 1;
+      const processSectionTree = (sec, depth = 0) => {
+        const ws = buildSectionVerticalSheet(sec, depth);
+        let sheetName = (sec.title || sec.tableId).replace(/[\[\]\*\?\/\\:]/g, '').substring(0, 30);
+        if (wb.SheetNames.includes(sheetName)) {
+          sheetName = `${sheetName.substring(0, 25)}_${sheetIndex}`;
+        }
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        sheetIndex++;
 
-      ws['!cols'] = [
-        { wch: 45 },
-        { wch: 75 }
-      ];
+        if (sec.children && sec.children.length > 0) {
+          sec.children.forEach(childSec => processSectionTree(childSec, depth + 1));
+        }
+      };
 
-      const sheetName = isSingleMode && rootRecordsToProcess[0]
-        ? getParentName(rootRecordsToProcess[0]).replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 30)
-        : 'Relatório Executivo';
-
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      processSectionTree(rootSec, 0);
 
       let filename = 'Relatorio_Vertical_Executivo.xlsx';
       if (isSingleMode && rootRecordsToProcess[0]) {
@@ -4987,7 +4975,7 @@
       }
 
       XLSX.writeFile(wb, filename);
-      logDebug(`Relatório Executivo Vertical exportado com sucesso: '${filename}'.`);
+      logDebug(`Relatório Executivo Vertical por Abas exportado com sucesso: '${filename}' (${wb.SheetNames.length} abas geradas).`);
     }
 
     function exportExcelRelational() {
