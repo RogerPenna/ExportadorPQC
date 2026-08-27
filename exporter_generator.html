@@ -1105,41 +1105,7 @@
       }
     }
     
-    // Flat mapping list of tables for quick checks
-    const PQC_FALLBACK_TABLES = [
-      { tableId: 'Empresa', id: 'Empresa' },
-      { tableId: 'Checklistdiamante', id: 'Checklistdiamante' },
-      { tableId: 'Checklist_Diamante', id: 'Checklist_Diamante' },
-      { tableId: 'ChecklistDiamante', id: 'ChecklistDiamante' },
-      { tableId: 'PDCA', id: 'PDCA' },
-      { tableId: 'Resultados', id: 'Resultados' },
-      { tableId: 'Plano_de_Melhorias', id: 'Plano_de_Melhorias' },
-      { tableId: 'Horas_Capacitacao', id: 'Horas_Capacitacao' },
-      { tableId: 'ResumoNotas', id: 'ResumoNotas' },
-      { tableId: 'Practices', id: 'Practices' },
-      { tableId: 'Avaliadores', id: 'Avaliadores' },
-      { tableId: 'Opcoes', id: 'Opcoes' },
-      { tableId: 'Avaliacao_Ano', id: 'Avaliacao_Ano' },
-      { tableId: 'Config', id: 'Config' },
-      { tableId: 'Users', id: 'Users' },
-      { tableId: 'AvaliadorRest', id: 'AvaliadorRest' },
-      { tableId: 'Pontualidade_IC', id: 'Pontualidade_IC' },
-      { tableId: 'GristDocTour', id: 'GristDocTour' },
-      { tableId: 'DescAutoAval', id: 'DescAutoAval' },
-      { tableId: 'Sessoes', id: 'Sessoes' },
-      { tableId: 'Subsessoes', id: 'Subsessoes' },
-      { tableId: 'Questoes', id: 'Questoes' },
-      { tableId: 'ListaSessoes', id: 'ListaSessoes' },
-      { tableId: 'Tables', id: 'Tables' },
-      { tableId: 'Tipos_Indicadores', id: 'Tipos_Indicadores' },
-      { tableId: 'Indicadores', id: 'Indicadores' },
-      { tableId: 'Praticasback', id: 'Praticasback' },
-      { tableId: 'RetornoAutoaval', id: 'RetornoAutoaval' },
-      { tableId: 'Avaliacao_da_Autoavaliacao', id: 'Avaliacao_da_Autoavaliacao' },
-      { tableId: 'Retorno_Avaliacao', id: 'Retorno_Avaliacao' }
-    ];
-
-    let gristTables = PQC_FALLBACK_TABLES;
+    let gristTables = [];
     let gristColumns = [];
     let reportSections = [];
 
@@ -1396,9 +1362,6 @@
     // Run when DOM is ready
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
-      if (reportSections.length === 0) {
-        addRootSection('Empresa');
-      }
     });
 
     // Run when Grist is fully initialized
@@ -1937,23 +1900,24 @@
       const cleanName = String(name).trim();
       logDebug(`Criando novo modelo: "${cleanName}"...`);
       try {
+        const firstTab = gristTables[0]?.tableId || '';
         const defaultConfig = {
           title: cleanName,
           subtitle: '',
           themeColor: '#3b82f6',
           fontSize: '9pt',
-          hierarchy: [
+          hierarchy: firstTab ? [
             {
               id: 'sec_' + Math.random().toString(36).substring(2, 9),
-              tableId: 'Empresa',
-              title: 'Empresa',
+              tableId: firstTab,
+              title: firstTab,
               parentTableId: null,
               linkColumn: '',
               columns: [],
               children: [],
               records: []
             }
-          ]
+          ] : []
         };
 
         const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
@@ -1999,30 +1963,57 @@
       }
     }
 
+    async function fetchDocumentTables() {
+      let tables = [];
+      try {
+        const rawMeta = await grist.docApi.fetchTable('_grist_Tables');
+        const decoded = decodeColumnar(rawMeta);
+        if (decoded && decoded.length > 0) {
+          tables = decoded
+            .map(r => r.tableId)
+            .filter(t => t && typeof t === 'string' && !t.startsWith('_') && t.toLowerCase() !== 'exportador');
+        }
+      } catch (e) {
+        logDebug(`Aviso ao ler _grist_Tables: ${e.message}`);
+      }
+
+      if (!tables || tables.length === 0) {
+        try {
+          const allTables = await tableLens.listAllTables();
+          if (allTables && allTables.length > 0) {
+            tables = allTables
+              .map(t => t.id)
+              .filter(t => t && typeof t === 'string' && !t.startsWith('_') && t.toLowerCase() !== 'exportador');
+          }
+        } catch (e) {
+          logDebug(`Aviso ao ler com tableLens: ${e.message}`);
+        }
+      }
+
+      const uniqueSorted = Array.from(new Set(tables)).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+      return uniqueSorted.map(t => ({ tableId: t, id: t }));
+    }
+
     async function loadGristMetadata() {
       try {
-        logDebug("Carregando tabelas via GristTableLens...");
-        const allTables = await tableLens.listAllTables();
-        logDebug(`Tabelas carregadas: ${allTables ? allTables.length : 0} encontradas`);
-        
-        const tableMap = new Map();
-        PQC_FALLBACK_TABLES.forEach(t => tableMap.set(t.tableId.toLowerCase(), { tableId: t.tableId, id: t.tableId }));
-        if (allTables && allTables.length > 0) {
-          allTables.forEach(t => tableMap.set(t.id.toLowerCase(), { tableId: t.id, id: t.id }));
-        }
-
-        gristTables = Array.from(tableMap.values()).sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
+        logDebug("Buscando tabelas do documento Grist em tempo real...");
+        gristTables = await fetchDocumentTables();
+        logDebug(`Tabelas do documento: ${gristTables.length} encontradas (${gristTables.map(t => t.tableId).join(', ')})`);
       } catch (err) {
-        logDebug(`Falha ao ler tabelas com TableLens: ${err.message}. Usando fallbacks.`);
-        const tableMap = new Map();
-        PQC_FALLBACK_TABLES.forEach(t => tableMap.set(t.tableId.toLowerCase(), { tableId: t.tableId, id: t.tableId }));
-        gristTables = Array.from(tableMap.values()).sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
+        logDebug(`Erro ao ler tabelas do documento: ${err.message}`);
+        gristTables = [];
       }
 
       await loadConfigFromExportadorTable();
 
-      renderSectionsManager();
-      updatePreview();
+      if (reportSections.length === 0 && gristTables.length > 0) {
+        const firstTable = gristTables[0].tableId;
+        logDebug(`Criando seção inicial com a primeira tabela do documento: '${firstTable}'`);
+        await addRootSection(firstTable);
+      } else {
+        renderSectionsManager();
+        updatePreview();
+      }
     }
 
     async function updateSectionsColumnsFromMetadata(sections) {
@@ -2099,7 +2090,11 @@
     }
 
     async function addRootSection(defaultTableId = '') {
-      const tableId = defaultTableId || (gristTables[0]?.tableId || 'Empresa');
+      const tableId = defaultTableId || (gristTables[0]?.tableId || '');
+      if (!tableId) {
+        alert("Nenhuma tabela encontrada neste documento Grist.");
+        return;
+      }
       const newSec = createSectionObject(tableId, `Seção: ${tableId}`, null, true);
       reportSections.push(newSec);
       await loadSectionColumnsAndData(newSec);
@@ -2111,7 +2106,12 @@
       const parentSec = findSectionById(reportSections, parentSecId);
       if (!parentSec) return;
 
-      const newSec = createSectionObject('PDCA', 'Sub-seção: PDCA', parentSec.tableId);
+      const defaultTab = gristTables[0]?.tableId || '';
+      if (!defaultTab) {
+        alert("Nenhuma tabela encontrada neste documento Grist.");
+        return;
+      }
+      const newSec = createSectionObject(defaultTab, `Sub-seção: ${defaultTab}`, parentSec.tableId);
       parentSec.children.push(newSec);
       await loadSectionColumnsAndData(newSec);
       renderSectionsManager();
@@ -2154,30 +2154,9 @@
         tableRecordsCache[tableId] = section.records;
         logDebug(`Tabela ${tableId} carregada: ${section.records.length} registros`);
       } catch (e) {
-        logDebug(`Erro ao ler registros de ${tableId}, usando mock.`);
-        // Fallbacks per tableId
-        if (tableId === 'PDCA') {
-          section.records = [
-            { PraticaRef: 1, PraticaRef_Nome2: "Planejamento Estratégico", PLANEJAR: 3, REALIZAR: 2, VERIFICAR: 0, APRENDER: 0, Nota_da_Pratica: 7.5, Evidencia_Planejar: "Revisão de planejamento concluída.", EmpresaRef: 'Empresa', RefEmpresa: 'Empresa' }
-          ];
-        } else if (tableId === 'Resultados') {
-          section.records = [
-            { Num: 1, Indicador: "% de evolução da receita bruta", Un_: "%", Melhor_sentido: "⬆", Meta_ultimo_ciclo_avaliado: 10, c2022: 12.5, c2023: 15.0, c2024: 18.0, RefEmpresa: 'Empresa' }
-          ];
-        } else if (tableId === 'Plano_de_Melhorias') {
-          section.records = [
-            { Lacuna_identificada: "Falta de indicadores de custos", O_que_fazer_: "Implementar custeio por absorção", Como_: "Rateio", Quem_: "Equipe financeira", Quando_Concluir_: "2026-12-31", EmpresaRef: 'Empresa' }
-          ];
-        } else if (tableId === 'Horas_Capacitacao') {
-          section.records = [
-            { Mes: "01 - Janeiro", No_de_horas_de_capacitacao_realizadas_no_SESCON_: 4, No_horas_de_capacitacao_outras_instituicoes_e_ou_empresas: 8, No_de_Funcionarios: 10, Total_de_horas_de_capacitacao_mes: 120, Media_de_horas_de_capacitacao_funcionario: 12, RefEmpresa: 'Empresa' }
-          ];
-        } else {
-          section.records = [
-            { id: 'Empresa', Nome_da_Empresa: "Hinckel Contabilidade", Email: "hinckel@gmail.com", Avaliador: "Evandro", Criado_por: "Rogério Penna", PERFIL_DA_ORGANIZACAO: "Assessoria estratégica." }
-          ];
-        }
-        tableRecordsCache[tableId] = section.records;
+        logDebug(`Aviso ao ler registros de ${tableId}: ${e.message}`);
+        section.records = [];
+        tableRecordsCache[tableId] = [];
       }
 
       // 2. Load schema columns via GristTableLens
