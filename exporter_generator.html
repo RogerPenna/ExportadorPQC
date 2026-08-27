@@ -1421,52 +1421,22 @@
         return;
       }
 
-      // Se o widget estiver vinculado à tabela Exportador, carrega a configuração da linha selecionada
-      if (currentConfigRecord && currentConfigRecord.id === record.id && currentConfigRecord._isFullRecordLoaded) {
-        return;
-      }
+      logDebug(`Registro do Exportador selecionado: ID #${record.id}. Garantindo que o modelo e seletor estejam carregados...`);
+      
+      // Carrega ou atualiza a lista de modelos da tabela Exportador no dropdown
+      await loadConfigFromExportadorTable();
 
-      logDebug(`Registro do Exportador selecionado: ID #${record.id}. Carregando dados completos do banco...`);
-      try {
-        const fullRecord = await tableLens.fetchRecordById('Exportador', record.id);
-        if (fullRecord) {
-          fullRecord._isFullRecordLoaded = true;
-          currentConfigRecord = fullRecord;
-          
-          const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
-          const jsonString = fullRecord[configKey];
-          logDebug(`Configuração da linha #${fullRecord.id} encontrada na coluna '${configKey}'.`);
-
-          if (jsonString) {
-            const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
-            if (config && config.hierarchy) {
-              document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado';
-              document.getElementById('report-subtitle-input').value = config.subtitle || '';
-              document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
-              document.getElementById('font-size-select').value = config.fontSize || '9pt';
-              document.getElementById('page-margin-select').value = config.pageMargin || '5mm';
-              document.getElementById('subsection-indent-select').value = config.subIndent !== undefined ? config.subIndent : '0px';
-              if (config.fieldPadding) document.getElementById('field-padding-select').value = config.fieldPadding;
-              if (config.cardPadding) document.getElementById('card-padding-select').value = config.cardPadding;
-              if (config.colGap) document.getElementById('col-gap-select').value = config.colGap;
-              document.getElementById('col-border-checkbox').checked = config.showColBorder === true;
-              
-              reportSections = config.hierarchy;
-              sanitizeSections(reportSections);
-              
-              await reloadAllSectionsData(reportSections);
-              await updateSectionsColumnsFromMetadata(reportSections);
-              renderSectionsManager();
-              updatePreview();
-            }
-          } else {
-            logDebug(`A coluna '${configKey}' está vazia para o registro ID #${record.id}.`);
+      if (!currentConfigRecord || String(currentConfigRecord.id) !== String(record.id)) {
+        try {
+          const fullRecord = await tableLens.fetchRecordById('Exportador', record.id);
+          if (fullRecord) {
+            fullRecord._isFullRecordLoaded = true;
+            currentConfigRecord = fullRecord;
+            await loadConfigFromRecord(currentConfigRecord);
           }
-        } else {
-          logDebug(`Não foi possível encontrar o registro ID #${record.id} na tabela 'Exportador'.`);
+        } catch (err) {
+          logDebug(`Erro ao carregar registro ID #${record.id} de Exportador: ${err.message}`);
         }
-      } catch (err) {
-        logDebug(`Erro ao carregar registro ID #${record.id} de Exportador: ${err.message}`);
       }
     });
 
@@ -1876,7 +1846,11 @@
       if (!record) return;
       try {
         const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
+        const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
+
         const jsonString = record[configKey];
+        const recordName = (nameKey && record[nameKey]) || record.Nome || record.nome || record.title;
+
         logDebug(`Configuração da linha #${record.id} carregada.`);
         
         const select = document.getElementById('template-select');
@@ -1887,7 +1861,13 @@
         if (jsonString) {
           const config = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
           if (config && config.hierarchy) {
-            document.getElementById('report-title-input').value = config.title || 'Relatório Consolidado';
+            const effectiveTitle = (recordName && String(recordName).trim() !== '' && String(recordName).trim() !== 'Carregando modelos...') 
+              ? String(recordName).trim() 
+              : (config.title || 'Relatório Consolidado');
+
+            config.title = effectiveTitle;
+
+            document.getElementById('report-title-input').value = effectiveTitle;
             document.getElementById('report-subtitle-input').value = config.subtitle || '';
             document.getElementById('theme-color-input').value = config.themeColor || '#3b82f6';
             document.getElementById('font-size-select').value = config.fontSize || '9pt';
