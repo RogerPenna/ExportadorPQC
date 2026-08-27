@@ -4084,7 +4084,7 @@
         });
 
         const hideRecordHeader = sec.showRecordHeader === false || hasOnlyRawHtml;
-        const cardStyle = hideRecordHeader 
+        const cardStyle = hasOnlyRawHtml 
           ? 'padding: 0; margin-bottom: 6px; background: transparent; border: none; box-shadow: none;'
           : (rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : '');
 
