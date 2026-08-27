@@ -1108,6 +1108,9 @@
     // Flat mapping list of tables for quick checks
     const PQC_FALLBACK_TABLES = [
       { tableId: 'Empresa', id: 'Empresa' },
+      { tableId: 'Checklistdiamante', id: 'Checklistdiamante' },
+      { tableId: 'Checklist_Diamante', id: 'Checklist_Diamante' },
+      { tableId: 'ChecklistDiamante', id: 'ChecklistDiamante' },
       { tableId: 'PDCA', id: 'PDCA' },
       { tableId: 'Resultados', id: 'Resultados' },
       { tableId: 'Plano_de_Melhorias', id: 'Plano_de_Melhorias' },
@@ -2000,15 +2003,20 @@
       try {
         logDebug("Carregando tabelas via GristTableLens...");
         const allTables = await tableLens.listAllTables();
-        logDebug(`Tabelas carregadas: ${allTables.length} encontradas`);
-        if (allTables.length > 0) {
-          gristTables = allTables.map(t => ({ tableId: t.id, id: t.id }));
-        } else {
-          gristTables = PQC_FALLBACK_TABLES;
+        logDebug(`Tabelas carregadas: ${allTables ? allTables.length : 0} encontradas`);
+        
+        const tableMap = new Map();
+        PQC_FALLBACK_TABLES.forEach(t => tableMap.set(t.tableId.toLowerCase(), { tableId: t.tableId, id: t.tableId }));
+        if (allTables && allTables.length > 0) {
+          allTables.forEach(t => tableMap.set(t.id.toLowerCase(), { tableId: t.id, id: t.id }));
         }
+
+        gristTables = Array.from(tableMap.values()).sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
       } catch (err) {
         logDebug(`Falha ao ler tabelas com TableLens: ${err.message}. Usando fallbacks.`);
-        gristTables = PQC_FALLBACK_TABLES;
+        const tableMap = new Map();
+        PQC_FALLBACK_TABLES.forEach(t => tableMap.set(t.tableId.toLowerCase(), { tableId: t.tableId, id: t.tableId }));
+        gristTables = Array.from(tableMap.values()).sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
       }
 
       await loadConfigFromExportadorTable();
@@ -2290,8 +2298,23 @@
       const sec = findSectionById(reportSections, secId);
       if (!sec || !select) return;
 
-      sec.tableId = select.value;
-      sec.title = `Seção: ${select.value}`;
+      let selectedVal = select.value;
+      if (selectedVal === '__custom__') {
+        const customTable = prompt("Digite o ID exato da tabela no Grist (ex: Checklistdiamante):");
+        if (!customTable || String(customTable).trim() === '') {
+          select.value = sec.tableId;
+          return;
+        }
+        selectedVal = String(customTable).trim();
+
+        if (!gristTables.some(t => t.tableId.toLowerCase() === selectedVal.toLowerCase())) {
+          gristTables.push({ tableId: selectedVal, id: selectedVal });
+          gristTables.sort((a, b) => a.tableId.localeCompare(b.tableId, 'pt-BR', { sensitivity: 'base' }));
+        }
+      }
+
+      sec.tableId = selectedVal;
+      sec.title = `Seção: ${selectedVal}`;
       await loadSectionColumnsAndData(sec);
       renderSectionsManager();
       if (activePropsSectionId === secId) renderSectionPropsBody(sec);
@@ -2472,6 +2495,7 @@
             <label style="font-weight: 700; color: #fff;">Tabela Grist</label>
             <select id="prop-table-${sec.id}" onchange="onSectionTableChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
               ${gristTables.map(t => `<option value="${t.tableId}" ${t.tableId === sec.tableId ? 'selected' : ''}>${t.tableId}</option>`).join('')}
+              <option value="__custom__">✏️ Outra Tabela (digitar ID)...</option>
             </select>
           </div>
 
