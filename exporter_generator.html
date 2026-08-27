@@ -2416,11 +2416,55 @@
       }
     }
 
+    function getAvailableCondColumns(sec) {
+      const colMap = new Map();
+
+      if (sec.parentTableId) {
+        const parentSec = findSectionById(reportSections, sec.parentTableId) || reportSections.find(s => s.tableId === sec.parentTableId);
+        if (parentSec && parentSec.columns) {
+          parentSec.columns.forEach(c => {
+            colMap.set(c.colId, `Pai (${sec.parentTableId}): ${c.label || c.colId}`);
+          });
+        }
+      }
+
+      if (sec.columns) {
+        sec.columns.forEach(c => {
+          if (!colMap.has(c.colId)) {
+            colMap.set(c.colId, `${sec.tableId}: ${c.label || c.colId}`);
+          }
+        });
+      }
+
+      return Array.from(colMap.entries()).map(([colId, label]) => ({ colId, label }));
+    }
+
+    function onSectionCondFilterChange(secId) {
+      const sec = findSectionById(reportSections, secId);
+      if (!sec) return;
+
+      const colSel = document.getElementById(`prop-condcol-${secId}`);
+      const opSel = document.getElementById(`prop-condop-${secId}`);
+      const valInput = document.getElementById(`prop-condval-${secId}`);
+      const valContainer = document.getElementById(`prop-condval-container-${secId}`);
+
+      if (colSel) sec.condCol = colSel.value;
+      if (opSel) sec.condOp = opSel.value;
+      if (valInput) sec.condVal = valInput.value;
+
+      if (valContainer && opSel) {
+        valContainer.style.display = (opSel.value === 'equals' || opSel.value === 'not_equals') ? 'block' : 'none';
+      }
+
+      updatePreview();
+    }
+
     function renderSectionPropsBody(sec) {
       const container = document.getElementById('section-props-body');
       if (!container) return;
 
       const isSubSection = sec.parentTableId !== null;
+      const availableCondCols = getAvailableCondColumns(sec);
 
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 14px;">
@@ -2434,6 +2478,35 @@
           <div class="form-group">
             <label style="font-weight: 700; color: #fff;">Título da Seção</label>
             <input type="text" id="prop-title-${sec.id}" value="${sec.title}" oninput="onSectionTitleChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+          </div>
+
+          <!-- Conditional Section Display Filter -->
+          <div class="form-group" style="background: rgba(59, 130, 246, 0.08); padding: 10px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+            <label style="font-weight: 700; color: #60a5fa; margin-bottom: 4px; display: block;">
+              👁️ Exibição Condicional (Exibir se...)
+            </label>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 8px;">
+              Exibe esta seção no relatório apenas se a condição for satisfeita no registro.
+            </div>
+
+            <label style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 2px; display: block;">Campo da Condição</label>
+            <select id="prop-condcol-${sec.id}" onchange="onSectionCondFilterChange('${sec.id}')" style="width: 100%; padding: 7px; font-size: 0.8rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; margin-bottom: 8px;">
+              <option value="">(Sempre Exibir - Sem Filtro)</option>
+              ${availableCondCols.map(c => `<option value="${c.colId}" ${sec.condCol === c.colId ? 'selected' : ''}>${c.label} (${c.colId})</option>`).join('')}
+            </select>
+
+            <label style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 2px; display: block;">Condição / Operador</label>
+            <select id="prop-condop-${sec.id}" onchange="onSectionCondFilterChange('${sec.id}')" style="width: 100%; padding: 7px; font-size: 0.8rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px; margin-bottom: 8px;">
+              <option value="true" ${(sec.condOp === 'true' || !sec.condOp) ? 'selected' : ''}>É Verdadeiro / Sim (Boolean / Checado)</option>
+              <option value="false" ${sec.condOp === 'false' ? 'selected' : ''}>É Falso / Não / Vazio</option>
+              <option value="equals" ${sec.condOp === 'equals' ? 'selected' : ''}>Igual a (Texto / Valor)</option>
+              <option value="not_equals" ${sec.condOp === 'not_equals' ? 'selected' : ''}>Diferente de</option>
+            </select>
+
+            <div id="prop-condval-container-${sec.id}" style="display: ${(sec.condOp === 'equals' || sec.condOp === 'not_equals') ? 'block' : 'none'};">
+              <label style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 2px; display: block;">Valor Comparado</label>
+              <input type="text" id="prop-condval-${sec.id}" value="${sec.condVal || ''}" oninput="onSectionCondFilterChange('${sec.id}')" placeholder="Ex: SIM ou DIAMANTE" style="width: 100%; padding: 7px; font-size: 0.8rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
+            </div>
           </div>
 
           <div class="form-group">
@@ -3904,8 +3977,69 @@
       return sec.records;
     }
 
+    function evaluateSectionCondition(sec, parentRecord) {
+      if (!sec || !sec.condCol || String(sec.condCol).trim() === '') return true;
+
+      const colName = String(sec.condCol).trim();
+      let val = undefined;
+
+      if (parentRecord && parentRecord[colName] !== undefined) {
+        val = parentRecord[colName];
+      }
+      if (val === undefined && activeGristRecord && activeGristRecord[colName] !== undefined) {
+        val = activeGristRecord[colName];
+      }
+
+      if (val === undefined && parentRecord) {
+        const key = Object.keys(parentRecord).find(k => k.toLowerCase() === colName.toLowerCase());
+        if (key) val = parentRecord[key];
+      }
+      if (val === undefined && sec.records && sec.records.length > 0) {
+        const firstRow = sec.records[0];
+        const key = Object.keys(firstRow).find(k => k.toLowerCase() === colName.toLowerCase());
+        if (key) val = firstRow[key];
+      }
+
+      const op = sec.condOp || 'true';
+
+      if (op === 'true') {
+        if (val === true || val === 1 || val === '1') return true;
+        if (typeof val === 'string') {
+          const lower = val.trim().toLowerCase();
+          return lower === 'true' || lower === 'sim' || lower === 's' || lower === 'yes';
+        }
+        return Boolean(val);
+      }
+
+      if (op === 'false') {
+        if (val === false || val === 0 || val === '0' || val === null || val === undefined) return true;
+        if (typeof val === 'string') {
+          const lower = val.trim().toLowerCase();
+          return lower === 'false' || lower === 'não' || lower === 'nao' || lower === 'n' || lower === 'no' || lower === '';
+        }
+        return !val;
+      }
+
+      if (op === 'equals') {
+        const target = String(sec.condVal || '').trim().toLowerCase();
+        return String(val || '').trim().toLowerCase() === target;
+      }
+
+      if (op === 'not_equals') {
+        const target = String(sec.condVal || '').trim().toLowerCase();
+        return String(val || '').trim().toLowerCase() !== target;
+      }
+
+      return true;
+    }
+
     // Recursive records renderer
     function renderSectionRecordsHTML(sec, parentRecord, parentTableId = null) {
+      if (!evaluateSectionCondition(sec, parentRecord)) {
+        logDebug(`[Filtro Condicional] Seção '${sec.title}' ocultada para ${parentRecord ? 'ID #' + parentRecord.id : 'registro ativo'} (Campo '${sec.condCol}' não satisfez a condição '${sec.condOp || 'true'}').`);
+        return '';
+      }
+
       const activeCols = sec.columns.filter(c => c.enabled);
       const scopeSelect = document.getElementById('report-scope-select');
       const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
@@ -4596,6 +4730,7 @@
     window.moveColumn = moveColumn;
     window.onSectionTableChange = onSectionTableChange;
     window.onSectionTitleChange = onSectionTitleChange;
+    window.onSectionCondFilterChange = onSectionCondFilterChange;
     window.onSectionLinkChange = onSectionLinkChange;
     window.toggleColumn = toggleColumn;
     window.toggleLabelMode = toggleLabelMode;
