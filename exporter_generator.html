@@ -531,6 +531,34 @@
       display: none;
     }
 
+    .sec-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 10px;
+      background: transparent;
+      border: none;
+      color: #f8fafc;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s ease;
+    }
+    .sec-menu-item:hover {
+      background: #1e293b;
+      color: #60a5fa;
+    }
+    .sec-menu-item.danger {
+      color: #f87171;
+    }
+    .sec-menu-item.danger:hover {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+
     .raw-html-content {
       width: 100% !important;
       margin: 0 !important;
@@ -2793,11 +2821,25 @@
       if (grpIdx === -1) return;
 
       const grp = sec.layoutItems[grpIdx];
-      const releasedItems = (grp.cols || []).map(slot => ({ type: 'column', colId: slot.colId }));
+      const groupTitle = grp.title ? `"${grp.title}"` : 'este grupo';
+      
+      const hideCols = confirm(`Deseja desativar (tornar invisíveis) as colunas do grupo ${groupTitle} no relatório?\n\n- OK: Desativa as colunas.\n- Cancelar: Mantém as colunas visíveis como colunas individuais.`);
 
-      sec.layoutItems.splice(grpIdx, 1, ...releasedItems);
+      const slotColIds = (grp.cols || []).map(slot => slot.colId);
+
+      if (hideCols) {
+        (sec.columns || []).forEach(col => {
+          if (slotColIds.includes(col.colId)) {
+            col.enabled = false;
+          }
+        });
+        sec.layoutItems.splice(grpIdx, 1);
+      } else {
+        const releasedItems = slotColIds.map(colId => ({ type: 'column', colId }));
+        sec.layoutItems.splice(grpIdx, 1, ...releasedItems);
+      }
+
       updateColumnsOrderFromLayout(sec);
-
       renderDrawerColumns();
       updatePreview();
     }
@@ -3157,6 +3199,117 @@
       updatePreview();
     }
 
+    let openSectionMenuId = null;
+
+    function closeAllSectionMenus() {
+      document.querySelectorAll('.sec-action-menu').forEach(el => el.remove());
+      openSectionMenuId = null;
+    }
+
+    // Close section dropdown menu when clicking anywhere else
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.sec-action-menu') && !e.target.closest('.sec-burger-btn')) {
+        closeAllSectionMenus();
+      }
+    });
+
+    function toggleSectionMenu(secId, event) {
+      if (event) event.stopPropagation();
+      const existing = document.getElementById('sec-menu-' + secId);
+      closeAllSectionMenus();
+      if (existing) return;
+
+      const btn = event.currentTarget;
+      const rect = btn.getBoundingClientRect();
+
+      const sec = findSectionById(reportSections, secId);
+      if (!sec) return;
+      const activeColCount = (sec.columns || []).filter(c => c.enabled).length;
+
+      const menu = document.createElement('div');
+      menu.id = 'sec-menu-' + secId;
+      menu.className = 'sec-action-menu';
+      menu.style.cssText = `
+        position: fixed;
+        top: ${rect.bottom + 4}px;
+        right: ${window.innerWidth - rect.right}px;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        z-index: 9999;
+        min-width: 200px;
+        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      `;
+
+      menu.innerHTML = `
+        <button class="sec-menu-item" onclick="openSectionPropsDrawer('${secId}'); closeAllSectionMenus();">
+          <span>⚙️</span> <span>Opções da Seção</span>
+        </button>
+        <button class="sec-menu-item" onclick="openColumnsDrawer('${secId}'); closeAllSectionMenus();">
+          <span>📊</span> <span>Configurar Colunas (${activeColCount})</span>
+        </button>
+        <button class="sec-menu-item" onclick="addChildSection('${secId}'); closeAllSectionMenus();">
+          <span>➕</span> <span>Adicionar Subseção</span>
+        </button>
+        <button class="sec-menu-item" onclick="duplicateSection('${secId}'); closeAllSectionMenus();">
+          <span>📋</span> <span>Duplicar Seção</span>
+        </button>
+        <div style="height: 1px; background: #334155; margin: 4px 0;"></div>
+        <button class="sec-menu-item danger" onclick="removeSection('${secId}'); closeAllSectionMenus();">
+          <span>🗑️</span> <span>Excluir Seção</span>
+        </button>
+      `;
+
+      document.body.appendChild(menu);
+      openSectionMenuId = secId;
+    }
+
+    function deepCloneSection(sec) {
+      const newId = 'sec_' + Math.random().toString(36).substring(2, 9);
+      const clonedCols = JSON.parse(JSON.stringify(sec.columns || []));
+      const clonedChildren = (sec.children || []).map(child => deepCloneSection(child));
+      const clonedLayoutItems = JSON.parse(JSON.stringify(sec.layoutItems || []));
+
+      return {
+        ...sec,
+        id: newId,
+        title: sec.title ? `${sec.title} (Cópia)` : sec.tableId,
+        columns: clonedCols,
+        children: clonedChildren,
+        layoutItems: clonedLayoutItems,
+        records: [...(sec.records || [])]
+      };
+    }
+
+    function duplicateSection(secId) {
+      const sec = findSectionById(reportSections, secId);
+      if (!sec) return;
+
+      const cloned = deepCloneSection(sec);
+
+      function insertCloneInList(list) {
+        const idx = list.findIndex(s => s.id === secId);
+        if (idx !== -1) {
+          list.splice(idx + 1, 0, cloned);
+          return true;
+        }
+        for (const item of list) {
+          if (item.children && insertCloneInList(item.children)) return true;
+        }
+        return false;
+      }
+
+      insertCloneInList(reportSections);
+      sanitizeSections(reportSections);
+      renderSectionsManager();
+      updatePreview();
+      logDebug(`Seção '${sec.title}' duplicada com sucesso.`);
+    }
+
     function renderSectionsManager() {
       const container = document.getElementById('tree-sections-container');
       container.innerHTML = reportSections.map(sec => renderSectionCardHTML(sec, 0)).join('');
@@ -3165,7 +3318,6 @@
     function renderSectionCardHTML(sec, depth) {
       const indent = depth * 14;
       const isSubSection = depth > 0;
-      const activeColCount = (sec.columns || []).filter(c => c.enabled).length;
 
       return `
         <div class="section-card" style="margin-left: ${indent}px; padding: 8px 10px; margin-bottom: 6px; border-left: 3px solid ${depth > 0 ? 'var(--accent)' : 'var(--primary)'}; background: rgba(30, 41, 59, 0.7); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
@@ -3181,18 +3333,13 @@
               ${isSubSection ? `<span style="font-size:0.65rem; color:#94a3b8; font-weight:normal;">(Sub)</span>` : ''}
             </div>
 
-            <!-- Right: Reorder Arrows & Action Buttons -->
-            <div style="display: flex; align-items: center; gap: 3px;">
+            <!-- Right: Reorder Arrows & Hamburger Menu -->
+            <div style="display: flex; align-items: center; gap: 4px;">
               <button class="preview-btn" onclick="moveSection('${sec.id}', 'up')" title="Mover Seção para Cima">▲</button>
               <button class="preview-btn" onclick="moveSection('${sec.id}', 'down')" title="Mover Seção para Baixo">▼</button>
-              <button class="preview-btn" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: #3b82f6; font-size: 0.72rem; padding: 2px 6px;" onclick="openSectionPropsDrawer('${sec.id}')" title="Configurar Propriedades da Seção (Tabela, Título, Quebras A4, Filtros)">
-                ⚙️ Opções
+              <button class="preview-btn sec-burger-btn" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: #3b82f6; font-size: 0.85rem; padding: 2px 7px; font-weight: bold;" onclick="toggleSectionMenu('${sec.id}', event)" title="Menu de Ações da Seção (Opções, Colunas, Duplicar, Subseção, Excluir)">
+                ☰
               </button>
-              <button class="preview-btn" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: #a855f7; font-size: 0.72rem; padding: 2px 6px;" onclick="openColumnsDrawer('${sec.id}')" title="Configurar Colunas (${activeColCount} ativas)">
-                📊 Colunas (${activeColCount})
-              </button>
-              <button class="btn-icon" style="color: var(--primary); font-size: 0.78rem; padding: 2px 4px;" onclick="addChildSection('${sec.id}')" title="Adicionar Sub-seção Filha">+ Sub</button>
-              <button class="btn-icon" style="color: var(--danger); font-size: 0.78rem; padding: 2px 4px;" onclick="removeSection('${sec.id}')" title="Excluir Seção">✕</button>
             </div>
           </div>
         </div>
@@ -4457,6 +4604,9 @@
     window.onReportFieldClick = onReportFieldClick;
     window.addRootSection = addRootSection;
     window.addChildSection = addChildSection;
+    window.duplicateSection = duplicateSection;
+    window.toggleSectionMenu = toggleSectionMenu;
+    window.closeAllSectionMenus = closeAllSectionMenus;
     window.removeSection = removeSection;
     window.moveColumn = moveColumn;
     window.onSectionTableChange = onSectionTableChange;
