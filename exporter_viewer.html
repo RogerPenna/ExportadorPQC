@@ -10,8 +10,6 @@
   <!-- html2canvas and jsPDF for PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- Grist Table Lens helper -->
-  <script src="grist-table-lens.js"></script>
   <!-- Google Fonts Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -341,11 +339,15 @@
     </div>
   </main>
 
-  <script>
+  <script type="module">
+    import { GristTableLens } from './grist-table-lens.js';
+
     let reportSections = [];
     let gristTables = [];
     let activeGristRecord = null;
     let currentRootRecordIndex = 0;
+
+    const tableLens = new GristTableLens(grist);
 
     // Initialize Grist API
     grist.ready({ requiredAccess: 'full' });
@@ -801,6 +803,12 @@
       processSectionSheet(rootSec);
       XLSX.writeFile(wb, 'Relatorio_Relacional.xlsx');
     }
+
+    window.navigateRootRecord = navigateRootRecord;
+    window.onRootRecordSelectChange = onRootRecordSelectChange;
+    window.updatePreview = updatePreview;
+    window.exportPDF = exportPDF;
+    window.exportExcel = exportExcel;
 
     // Run Viewer Initialization
     window.addEventListener('DOMContentLoaded', initViewer);

@@ -633,3 +633,7 @@ export const GristTableLens = function(gristInstance) {
         return _grist.docApi.applyUserActions([['BulkRemoveRecord', tableId, cleanIds]]);
     };
 };
+
+if (typeof window !== 'undefined') {
+    window.GristTableLens = GristTableLens;
+}
