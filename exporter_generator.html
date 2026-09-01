@@ -484,7 +484,7 @@
       print-color-adjust: exact !important;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
+      justify-content: flex-start;
       height: 100%;
       box-sizing: border-box;
     }
@@ -4614,7 +4614,7 @@
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${colMeta.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: auto; margin-bottom: 2px;">${colName}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: 0; margin-bottom: 3px;">${colName}</span>
                   <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg} ${cellColor} ${cellBold} ${cellItalic} ${condBoxCss} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `;
@@ -4691,7 +4691,7 @@
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  ${showLabel ? `<span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: auto; margin-bottom: 4px;">${colName}</span>` : ''}
+                  ${showLabel ? `<span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: 0; margin-bottom: 4px;">${colName}</span>` : ''}
                   <div class="raw-html-content" style="width: 100%; overflow: visible; white-space: normal;">
                     ${val}
                   </div>
@@ -4705,7 +4705,7 @@
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${c.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
                     <button class="preview-btn delete" onclick="toggleColumn('${sec.id}', '${c.colId}')" title="Desativar Campo">✕</button>
                   </div>
-                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: auto; margin-bottom: 2px;">${colName}</span>
+                  <span style="font-size: 7.5pt; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-top: 0; margin-bottom: 3px;">${colName}</span>
                   <span style="font-size: var(--pdf-font-size, 9pt); word-break: break-word; white-space: pre-wrap; ${cellBg} ${cellColor} ${cellBold} ${cellItalic} ${condBoxCss} display: inline-block; line-height: 1.4;">${val}</span>
                 </div>
               `);
