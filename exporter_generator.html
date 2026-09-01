@@ -4690,7 +4690,7 @@
           ? 'padding: 0; margin-bottom: 6px; background: transparent; border: none; box-shadow: none;'
           : (rIdx > 0 && sec.pageBreak === 'always' ? 'margin-top: 0;' : '');
 
-        return `
+        const cardHtml = `
           <div class="pdf-record-card${pageBreakClass}" style="${cardStyle}">
             ${hideRecordHeader ? '' : `
               <div class="pdf-record-title">
@@ -4699,9 +4699,16 @@
               </div>
             `}
             ${innerContentBlocks.join('')}
-            ${childrenHtml ? `<div style="margin-top: 8px; padding-left: var(--pdf-sub-indent, 6px); border-left: 2px solid var(--pdf-theme-color, #3b82f6);">${childrenHtml}</div>` : ''}
           </div>
         `;
+
+        const subChildrenBlock = childrenHtml ? `
+          <div class="section-children-wrapper" style="grid-column: 1 / -1; width: 100%; margin-top: 8px; padding-left: var(--pdf-sub-indent, 6px); border-left: 2px solid var(--pdf-theme-color, #3b82f6);">
+            ${childrenHtml}
+          </div>
+        ` : '';
+
+        return cardHtml + subChildrenBlock;
       }).join('');
 
       const cappedNotice = isCapped ? `<div style="text-align:center; font-size:7.5pt; color:#94a3b8; padding:6px; border:1px dashed #cbd5e1; border-radius:6px; margin-top:4px;">⚠️ Pré-visualização da tabela '${sec.tableId}' limitada a ${maxRec} de ${filteredRecords.length} registros.</div>` : '';
