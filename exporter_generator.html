@@ -485,7 +485,8 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      height: 100%;
+      height: auto;
+      min-height: 100%;
       box-sizing: border-box;
     }
     .preview-field-container:hover {
@@ -754,14 +755,45 @@
     .section-cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
     .section-cols-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: stretch; }
 
-    /* Page break controls (print/PDF) */
+    /* Page break and card height controls (prevent text overlap in PDF/print) */
     .pdf-record-card {
       break-inside: avoid;
       page-break-inside: avoid;
+      position: relative;
+      display: block;
+      height: auto !important;
+      min-height: min-content;
+      overflow: visible !important;
+      margin-bottom: 12px;
+      clear: both;
     }
     .page-break-before-record {
       break-before: page;
       page-break-before: always;
+    }
+
+    /* Viewer Mode UI Rules (triggered when ModoEdicao column is false or ?mode=view) */
+    body.viewer-mode .admin-only,
+    body.viewer-mode .btn-action[onclick*="createNewTemplate"],
+    body.viewer-mode .btn-action[onclick*="renameActiveTemplate"],
+    body.viewer-mode .btn-action[onclick*="deleteTemplate"],
+    body.viewer-mode .btn-action[onclick*="addRootSection"],
+    body.viewer-mode .tree-container,
+    body.viewer-mode .json-box,
+    body.viewer-mode .btn-action[onclick*="saveConfigToGrist"],
+    body.viewer-mode .btn-action[onclick*="restoreBackupFromGrist"],
+    body.viewer-mode #columns-drawer,
+    body.viewer-mode .preview-field-controls,
+    body.viewer-mode .section-controls {
+      display: none !important;
+    }
+
+    body.viewer-mode .preview-field-container {
+      border: 1px dashed transparent;
+      cursor: default;
+    }
+    body.viewer-mode .preview-field-container:hover {
+      box-shadow: none;
     }
   </style>
 </head>
@@ -1952,8 +1984,63 @@
       }
     }
 
+    let isEditMode = true; // Global state for Admin (true) vs Viewer (false)
+
+    function updateModeFromRecord(record) {
+      // 1. Check URL query parameters first (?mode=view or ?mode=edit)
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = (urlParams.get('mode') || urlParams.get('modo') || '').toLowerCase();
+      if (modeParam === 'view' || modeParam === 'viewer' || modeParam === 'visualizador') {
+        isEditMode = false;
+        logDebug(`[MODO] Forçado via URL (?mode=view): MODO VISUALIZADOR (Somente Leitura)`);
+        applyModeUI();
+        return;
+      }
+      if (modeParam === 'edit' || modeParam === 'admin' || modeParam === 'gerador') {
+        isEditMode = true;
+        logDebug(`[MODO] Forçado via URL (?mode=edit): MODO ADMINISTRADOR (Edição Ativa)`);
+        applyModeUI();
+        return;
+      }
+
+      // 2. Check Grist table record ModoEdicao column
+      if (record) {
+        let modoEd = record.ModoEdicao !== undefined ? record.ModoEdicao :
+                    (record['Modo Edição'] !== undefined ? record['Modo Edição'] :
+                    (record['Modo_Edicao'] !== undefined ? record['Modo_Edicao'] :
+                    (record['Edicao'] !== undefined ? record['Edicao'] :
+                    (record['EditMode'] !== undefined ? record['EditMode'] : undefined))));
+
+        if (modoEd !== undefined) {
+          isEditMode = Boolean(modoEd);
+          logDebug(`[MODO] Lido da coluna 'ModoEdicao' (#${record.id}): ${isEditMode ? 'ADMINISTRADOR (Edição ✅)' : 'VISUALIZADOR (Somente Leitura 🔒)'}`);
+          applyModeUI();
+          return;
+        }
+      }
+
+      isEditMode = true;
+      applyModeUI();
+    }
+
+    function applyModeUI() {
+      const panelTitle = document.querySelector('.panel-header h1');
+      const panelSubtitle = document.querySelector('.panel-header p');
+      
+      if (!isEditMode) {
+        document.body.classList.add('viewer-mode');
+        if (panelTitle) panelTitle.innerText = 'Visualizador de Relatórios';
+        if (panelSubtitle) panelSubtitle.innerText = 'Selecione o modelo e navegue pelas empresas';
+      } else {
+        document.body.classList.remove('viewer-mode');
+        if (panelTitle) panelTitle.innerText = 'Gerador de Relatórios';
+        if (panelSubtitle) panelSubtitle.innerText = 'Configure relações de árvore aninhadas e exporte';
+      }
+    }
+
     async function loadConfigFromRecord(record) {
       if (!record) return;
+      updateModeFromRecord(record);
       try {
         const configKey = await getColumnIdByLabel('Exportador', 'JSONExportador', 'JSONExportador');
         const nameKey = await getColumnIdByLabel('Exportador', 'Nome', 'Nome');
@@ -5288,6 +5375,7 @@
     }
 
     function onReportFieldClick(event, secId, colId) {
+      if (!isEditMode) return; // In Viewer Mode, field clicks are disabled
       if (event.target.closest('.preview-field-controls')) return;
       event.stopPropagation();
 
