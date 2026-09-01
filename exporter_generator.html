@@ -2887,19 +2887,38 @@
           const totalWidth = groupCols.reduce((sum, c) => sum + (parseFloat(c.width) || 0), 0);
           const isOver = totalWidth > 100;
 
+          const showBanner = item.showTitle !== false;
+          const currentBg = item.bgColor || '#1F3864';
+
           html += `
-            <div class="drawer-column-card" draggable="true" data-layout-index="${itemIdx}" ondragstart="onLayoutItemDragStart(event)" ondragover="onLayoutItemDragOver(event)" ondrop="onLayoutItemDrop(event, '${item.id}')" ondragend="onLayoutItemDragEnd(event)" style="background: rgba(30, 41, 59, 0.95); border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px; margin-bottom: 2px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                <div style="display:flex; align-items:center; gap:6px; flex:1;">
+            <div class="drawer-column-card" draggable="true" data-layout-index="${itemIdx}" ondragstart="onLayoutItemDragStart(event)" ondragover="onLayoutItemDragOver(event)" ondrop="onLayoutItemDrop(event, '${item.id}')" ondragend="onLayoutItemDragEnd(event)" style="background: rgba(30, 41, 59, 0.95); border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px; margin-bottom: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <div style="display:flex; align-items:center; gap:6px; flex:1; flex-wrap: wrap;">
                   <span style="color: var(--text-muted); cursor: grab; font-size:0.9rem;">☰</span>
                   <span style="color: #60a5fa; font-weight: 700; font-size: 0.85rem;">📦</span>
-                  <input type="text" value="${item.title || ('Grupo #' + (itemIdx + 1))}" style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 4px; padding: 2px 6px; width: 140px;" onchange="onGroupTitleChange('${item.id}', this.value)" placeholder="Nome do Grupo" onmousedown="event.stopPropagation()">
+                  <input type="text" value="${item.title || ('Grupo #' + (itemIdx + 1))}" style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 4px; padding: 2px 6px; width: 150px;" onchange="onGroupTitleChange('${item.id}', this.value)" placeholder="Título do Banner do Grupo" onmousedown="event.stopPropagation()">
                   <span style="font-size:0.7rem; color:${isOver ? '#ef4444' : '#94a3b8'};">(${totalWidth}% total)</span>
                 </div>
                 <div style="display: flex; gap: 4px;">
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'up')" title="Mover Grupo para Cima">▲</button>
                   <button class="preview-btn" onclick="moveLayoutItem(${itemIdx}, 'down')" title="Mover Grupo para Baixo">▼</button>
                   <button class="preview-btn delete" onclick="removeColumnGroup('${item.id}')" title="Excluir este Grupo (libera as colunas)">✕</button>
+                </div>
+              </div>
+
+              <!-- Controles de Estilo e Faixa do Grupo -->
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; background: rgba(15, 23, 42, 0.4); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);" onmousedown="event.stopPropagation()">
+                <label style="font-size: 0.72rem; color: #cbd5e1; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                  <input type="checkbox" ${showBanner ? 'checked' : ''} onchange="onGroupShowTitleToggle('${item.id}', this.checked)">
+                  Exibir Banner de Título
+                </label>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                  <span style="font-size: 0.68rem; color: #94a3b8;">Fundo/Banner:</span>
+                  <input type="color" value="${currentBg.startsWith('#') ? currentBg : '#1F3864'}" onchange="onGroupBgColorChange('${item.id}', this.value)" style="width: 22px; height: 18px; border: none; border-radius: 3px; cursor: pointer; background: transparent;" title="Escolher cor personalizada">
+                  <button onclick="onGroupBgColorChange('${item.id}', '#C00000')" style="background: #C00000; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Vermelho PQC (#C00000)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', '#1F3864')" style="background: #1F3864; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Azul Escuro PQC (#1F3864)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', '#2563eb')" style="background: #2563eb; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Azul Grist (#2563eb)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', 'transparent')" style="background: #334155; color: #fff; font-size: 8px; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer; font-weight: bold;" title="Sem Fundo (Transparente)">✕</button>
                 </div>
               </div>
 
@@ -4596,11 +4615,31 @@
               `;
             }).join('');
 
-            innerContentBlocks.push(`
-              <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: var(--col-gap, 6px); margin-bottom: 8px; align-items: stretch; width: 100%;">
-                ${groupFieldsHtml}
-              </div>
-            `);
+            const hasBg = Boolean(item.bgColor && item.bgColor !== 'transparent');
+            const showBanner = item.showTitle !== false && Boolean(item.title && item.title.trim() !== '');
+            const bannerBg = item.bgColor || '#1F3864';
+            const bannerTextColor = item.textColor || '#ffffff';
+
+            if (showBanner || hasBg) {
+              innerContentBlocks.push(`
+                <div class="pdf-group-card" style="background: ${hasBg ? item.bgColor : 'transparent'}; border-radius: 8px; margin-bottom: 12px; border: ${hasBg ? '1px solid rgba(0,0,0,0.12)' : 'none'}; overflow: hidden; width: 100%; box-sizing: border-box;">
+                  ${showBanner ? `
+                    <div class="pdf-group-banner" style="background: ${bannerBg}; color: ${bannerTextColor}; padding: 7px 12px; font-weight: 700; font-size: 10.5pt; font-family: inherit; letter-spacing: 0.02em;">
+                      ${item.title}
+                    </div>
+                  ` : ''}
+                  <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: var(--col-gap, 8px); padding: ${hasBg ? '10px' : '0'}; align-items: stretch; width: 100%; box-sizing: border-box;">
+                    ${groupFieldsHtml}
+                  </div>
+                </div>
+              `);
+            } else {
+              innerContentBlocks.push(`
+                <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: var(--col-gap, 6px); margin-bottom: 8px; align-items: stretch; width: 100%;">
+                  ${groupFieldsHtml}
+                </div>
+              `);
+            }
           } else if (item.type === 'column') {
             const c = sec.columns.find(col => col.colId === item.colId);
             if (!c || c.enabled === false) return;
@@ -5250,7 +5289,38 @@
       if (!sec || !sec.layoutItems) return;
       const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
       if (grp) {
-        grp.title = newTitle.trim() || 'Grupo';
+        grp.title = newTitle;
+        updatePreview();
+      }
+    }
+
+    function onGroupShowTitleToggle(groupId, showTitle) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (grp) {
+        grp.showTitle = Boolean(showTitle);
+        updatePreview();
+      }
+    }
+
+    function onGroupBgColorChange(groupId, color) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (grp) {
+        grp.bgColor = color;
+        renderDrawerColumns();
+        updatePreview();
+      }
+    }
+
+    function onGroupTextColorChange(groupId, color) {
+      const sec = findSectionById(reportSections, activeDrawerSectionId);
+      if (!sec || !sec.layoutItems) return;
+      const grp = sec.layoutItems.find(i => i.type === 'group' && i.id === groupId);
+      if (grp) {
+        grp.textColor = color;
         renderDrawerColumns();
         updatePreview();
       }
@@ -5564,6 +5634,9 @@
     window.promptCustomLabel = promptCustomLabel;
     window.clearCustomLabel = clearCustomLabel;
     window.onGroupTitleChange = onGroupTitleChange;
+    window.onGroupShowTitleToggle = onGroupShowTitleToggle;
+    window.onGroupBgColorChange = onGroupBgColorChange;
+    window.onGroupTextColorChange = onGroupTextColorChange;
     window.toggleColLockInGroup = toggleColLockInGroup;
     window.onReportFieldClick = onReportFieldClick;
     window.addRootSection = addRootSection;
