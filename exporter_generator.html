@@ -1565,6 +1565,9 @@
         }
         sec.colsLayout = 1;
         if (!sec.pageBreak) sec.pageBreak = 'avoid';
+        if (sec.condCol === undefined) sec.condCol = '';
+        if (!sec.condOp) sec.condOp = 'true';
+        if (sec.condVal === undefined) sec.condVal = '';
 
         if (sec.tableId && !gristTables.some(t => t.tableId.toLowerCase() === sec.tableId.toLowerCase())) {
           gristTables.push({ tableId: sec.tableId, id: sec.tableId });
@@ -1621,6 +1624,9 @@
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
           showRecordHeader: sec.showRecordHeader !== false,
+          condCol: sec.condCol || '',
+          condOp: sec.condOp || 'true',
+          condVal: sec.condVal || '',
           layoutItems: (sec.layoutItems || []).map(item => {
             if (item.type === 'group') {
               return {
@@ -3794,6 +3800,9 @@
           colsLayout: sec.colsLayout || 1,
           pageBreak: sec.pageBreak || 'avoid',
           showRecordHeader: sec.showRecordHeader !== false,
+          condCol: sec.condCol || '',
+          condOp: sec.condOp || 'true',
+          condVal: sec.condVal || '',
           layoutItems: (sec.layoutItems || []).map(item => {
             if (item.type === 'group') {
               return {
