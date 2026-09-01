@@ -4602,8 +4602,13 @@
               const colBorderCss = (showColBorder && !isLast) ? 'border-right: 1px solid #cbd5e1; padding-right: 4px;' : '';
               const condBoxCss = hasCondBg ? `padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.12) !important; font-weight: 600; width: 100%; box-sizing: border-border-box;` : '';
 
+              const hasGroupBg = Boolean(item.bgColor && item.bgColor !== 'transparent');
+              const groupFieldCardStyle = hasGroupBg 
+                ? 'background: #ffffff !important; color: #1e293b !important; padding: 8px 10px; border-radius: 6px; border: 1px solid #cbd5e1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);' 
+                : '';
+
               return `
-                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
+                <div class="preview-field-container" style="text-align: ${align}; ${colBorderCss} ${groupFieldCardStyle}" onclick="onReportFieldClick(event, '${sec.id}', '${colMeta.colId}')" title="Clique para focar este campo na Gaveta de Configuração">
                   <div class="preview-field-controls">
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'up')" title="Mover Campo para Cima">▲</button>
                     <button class="preview-btn" onclick="moveColumn('${sec.id}', '${colMeta.colId}', 'down')" title="Mover Campo para Baixo">▼</button>
