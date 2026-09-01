@@ -1627,6 +1627,9 @@
                 type: 'group',
                 id: item.id,
                 title: item.title,
+                showTitle: item.showTitle !== false,
+                bgColor: item.bgColor || 'transparent',
+                textColor: item.textColor || '#ffffff',
                 cols: (item.cols || []).map(c => ({
                   colId: c.colId,
                   width: parseFloat(c.width) || 25,
@@ -2888,7 +2891,15 @@
           const isOver = totalWidth > 100;
 
           const showBanner = item.showTitle !== false;
-          const currentBg = item.bgColor || '#1F3864';
+          const currentBg = item.bgColor || 'transparent';
+
+          const getChipStyle = (cColor) => {
+            const normTarget = cColor.toLowerCase();
+            const normCurrent = (item.bgColor || 'transparent').toLowerCase();
+            const isSel = normTarget === normCurrent;
+            const activeCss = isSel ? 'box-shadow: 0 0 0 2px #fff, 0 0 0 4px #3b82f6 !important; transform: scale(1.15); font-weight: bold;' : 'opacity: 0.7;';
+            return `width: 18px; height: 18px; border: 1px solid #fff; border-radius: 4px; cursor: pointer; transition: all 0.15s ease; ${activeCss}`;
+          };
 
           html += `
             <div class="drawer-column-card" draggable="true" data-layout-index="${itemIdx}" ondragstart="onLayoutItemDragStart(event)" ondragover="onLayoutItemDragOver(event)" ondrop="onLayoutItemDrop(event, '${item.id}')" ondragend="onLayoutItemDragEnd(event)" style="background: rgba(30, 41, 59, 0.95); border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px; margin-bottom: 4px;">
@@ -2914,11 +2925,11 @@
                 </label>
                 <div style="display: flex; align-items: center; gap: 5px;">
                   <span style="font-size: 0.68rem; color: #94a3b8;">Fundo/Banner:</span>
-                  <input type="color" value="${currentBg.startsWith('#') ? currentBg : '#1F3864'}" onchange="onGroupBgColorChange('${item.id}', this.value)" style="width: 22px; height: 18px; border: none; border-radius: 3px; cursor: pointer; background: transparent;" title="Escolher cor personalizada">
-                  <button onclick="onGroupBgColorChange('${item.id}', '#C00000')" style="background: #C00000; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Vermelho PQC (#C00000)"></button>
-                  <button onclick="onGroupBgColorChange('${item.id}', '#1F3864')" style="background: #1F3864; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Azul Escuro PQC (#1F3864)"></button>
-                  <button onclick="onGroupBgColorChange('${item.id}', '#2563eb')" style="background: #2563eb; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer;" title="Azul Grist (#2563eb)"></button>
-                  <button onclick="onGroupBgColorChange('${item.id}', 'transparent')" style="background: #334155; color: #fff; font-size: 8px; width: 16px; height: 16px; border: 1px solid #fff; border-radius: 3px; cursor: pointer; font-weight: bold;" title="Sem Fundo (Transparente)">✕</button>
+                  <input type="color" value="${(currentBg.startsWith('#') ? currentBg : '#1F3864')}" onchange="onGroupBgColorChange('${item.id}', this.value)" style="width: 22px; height: 18px; border: none; border-radius: 3px; cursor: pointer; background: transparent;" title="Escolher cor personalizada">
+                  <button onclick="onGroupBgColorChange('${item.id}', '#C00000')" style="background: #C00000; ${getChipStyle('#C00000')}" title="Vermelho PQC (#C00000)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', '#1F3864')" style="background: #1F3864; ${getChipStyle('#1F3864')}" title="Azul Escuro PQC (#1F3864)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', '#2563eb')" style="background: #2563eb; ${getChipStyle('#2563eb')}" title="Azul Grist (#2563eb)"></button>
+                  <button onclick="onGroupBgColorChange('${item.id}', 'transparent')" style="background: #334155; color: #fff; font-size: 8px; ${getChipStyle('transparent')} display: flex; align-items: center; justify-content: center;" title="Sem Fundo (Transparente)">✕</button>
                 </div>
               </div>
 
@@ -3789,6 +3800,9 @@
                 type: 'group',
                 id: item.id,
                 title: item.title,
+                showTitle: item.showTitle !== false,
+                bgColor: item.bgColor || 'transparent',
+                textColor: item.textColor || '#ffffff',
                 cols: (item.cols || []).map(c => ({
                   colId: c.colId,
                   width: parseFloat(c.width) || 25,
