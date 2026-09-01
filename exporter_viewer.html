@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Visualizador & Exportador de Relatórios</title>
+  <!-- Grist Custom Widget API -->
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- html2canvas and jsPDF for PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Grist Table Lens helper -->
+  <script src="grist-table-lens.js"></script>
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --success-hover: #059669;
+      --pdf-theme-color: #1F3864;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Bar Header */
+    .viewer-topbar {
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .viewer-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .viewer-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border-color);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .control-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #60a5fa;
+      text-transform: uppercase;
+    }
+
+    select, input[type="text"] {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .btn-icon {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon:hover { background: #334155; }
+
+    .btn-action {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pdf { background: #ef4444; color: #fff; }
+    .btn-pdf:hover { background: #dc2626; }
+
+    .btn-excel { background: #10b981; color: #fff; }
+    .btn-excel:hover { background: #059669; }
+
+    .btn-print { background: #3b82f6; color: #fff; }
+    .btn-print:hover { background: #2563eb; }
+
+    /* Main Preview Area */
+    .main-viewport {
+      flex: 1;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow-y: auto;
+    }
+
+    /* A4 Paper Sheet Styling */
+    .paper-sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: #ffffff;
+      color: #1e293b;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      border-radius: 2px;
+      padding: 16mm 14mm;
+      position: relative;
+      box-sizing: border-box;
+    }
+
+    .report-header-banner {
+      border-bottom: 2px solid var(--pdf-theme-color, #1F3864);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+
+    .report-main-title {
+      font-size: 16pt;
+      font-weight: 800;
+      color: var(--pdf-theme-color, #1F3864);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .report-subtitle {
+      font-size: 10pt;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .report-meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5pt;
+      color: #64748b;
+      margin-top: 8px;
+      padding-top: 4px;
+      border-top: 1px dashed #cbd5e1;
+    }
+
+    /* Sections & Cards Rendering */
+    .viewer-section-container {
+      margin-bottom: 18px;
+    }
+
+    .viewer-section-title {
+      font-size: 11pt;
+      font-weight: 700;
+      color: var(--pdf-theme-color, #1F3864);
+      border-bottom: 1.5px solid var(--pdf-theme-color, #1F3864);
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .pdf-record-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .pdf-record-title {
+      font-size: 8pt;
+      font-weight: 700;
+      color: #64748b;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .pdf-group-card {
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .pdf-group-banner {
+      padding: 7px 12px;
+      font-weight: 700;
+      font-size: 10.5pt;
+      letter-spacing: 0.02em;
+    }
+
+    .viewer-field-box {
+      margin-bottom: 6px;
+    }
+
+    .viewer-field-label {
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .viewer-field-val {
+      font-size: 9pt;
+      word-break: break-word;
+      white-space: pre-wrap;
+      display: inline-block;
+      line-height: 1.4;
+    }
+
+    /* Print styles */
+    @media print {
+      body { background: #fff; padding: 0; }
+      .viewer-topbar { display: none !important; }
+      .main-viewport { padding: 0; }
+      .paper-sheet { box-shadow: none; width: 100%; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation & Action Bar -->
+  <header class="viewer-topbar">
+    <div class="viewer-title">
+      📄 Relatório Executivo
+    </div>
+
+    <div class="viewer-controls">
+      <!-- Record Navigator -->
+      <div class="control-group">
+        <span class="control-label">🏢 Empresa:</span>
+        <button class="btn-icon" onclick="navigateRootRecord(-1)" title="Anterior">◀</button>
+        <select id="root-record-select" onchange="onRootRecordSelectChange()" style="max-width: 180px;">
+          <option value="0">Carregando...</option>
+        </select>
+        <button class="btn-icon" onclick="navigateRootRecord(1)" title="Próximo">▶</button>
+        <span id="root-record-counter" style="font-size: 0.75rem; color: #94a3b8;">(0 de 0)</span>
+      </div>
+
+      <!-- Escopo -->
+      <div class="control-group">
+        <span class="control-label">Escopo:</span>
+        <select id="report-scope-select" onchange="updatePreview()">
+          <option value="selected" selected>🏢 1 Empresa Selecionada</option>
+          <option value="all">📚 Consolidado (Todas)</option>
+        </select>
+      </div>
+
+      <!-- Layout do Excel -->
+      <div class="control-group">
+        <span class="control-label">Excel:</span>
+        <select id="excel-format-select">
+          <option value="vertical" selected>📄 Vertical por Abas</option>
+          <option value="relational">📊 Banco Relacional</option>
+        </select>
+      </div>
+
+      <!-- Export Actions -->
+      <button class="btn-action btn-pdf" onclick="exportPDF()">📄 Baixar PDF</button>
+      <button class="btn-action btn-excel" onclick="exportExcel()">📗 Baixar Excel</button>
+      <button class="btn-action btn-print" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </header>
+
+  <!-- Main Viewport -->
+  <main class="main-viewport">
+    <div class="paper-sheet" id="pdf-preview-sheet">
+      <div class="report-header-banner">
+        <div class="report-main-title" id="pdf-title">RELATÓRIO EXECUTIVO</div>
+        <div class="report-subtitle" id="pdf-subtitle"></div>
+        <div class="report-meta-row">
+          <div>Data da Exportação: <span id="pdf-date">--/--/----</span></div>
+          <div>Documento Oficial</div>
+        </div>
+      </div>
+
+      <div id="pdf-sections-content">
+        <div style="text-align: center; color: #94a3b8; padding: 40px; font-size: 0.9rem;">
+          Carregando modelo e dados do relatório...
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let reportSections = [];
+    let gristTables = [];
+    let activeGristRecord = null;
+    let currentRootRecordIndex = 0;
+
+    // Initialize Grist API
+    grist.ready({ requiredAccess: 'full' });
+
+    grist.onRecord(function(record) {
+      if (record) {
+        activeGristRecord = record;
+        updateRootRecordNavigator();
+        updatePreview();
+      }
+    });
+
+    async function initViewer() {
+      try {
+        document.getElementById('pdf-date').innerText = new Date().toLocaleDateString('pt-BR');
+        
+        // 1. Fetch document tables
+        await fetchDocumentTables();
+
+        // 2. Load saved configuration from Grist
+        await loadConfigFromGrist();
+
+        // 3. Update navigator and preview
+        updateRootRecordNavigator();
+        updatePreview();
+      } catch (err) {
+        console.error("Erro na inicialização do visualizador:", err);
+      }
+    }
+
+    async function fetchDocumentTables() {
+      try {
+        const tables = await tableLens.listAllTables();
+        if (tables && tables.length > 0) {
+          gristTables = tables.map(t => ({ tableId: t.id, id: t.id }));
+        }
+      } catch (e) {
+        console.warn("Erro ao buscar tabelas via tableLens:", e);
+      }
+    }
+
+    async function loadConfigFromGrist() {
+      try {
+        // Try reading JSONExportador from config table or active table
+        const tables = await tableLens.listAllTables();
+        const exportadorTable = tables.find(t => t.id.toLowerCase() === 'exportador' || t.id.toLowerCase() === 'config');
+        
+        let savedJsonStr = null;
+        if (exportadorTable) {
+          const recs = await grist.docApi.fetchTable(exportadorTable.id);
+          if (recs && recs.records && recs.records.length > 0) {
+            const firstRec = recs.records[0];
+            savedJsonStr = firstRec.JSONExportador || firstRec.jsonexportador || firstRec.ConfigJson;
+          }
+        }
+
+        if (!savedJsonStr && activeGristRecord) {
+          savedJsonStr = activeGristRecord.JSONExportador || activeGristRecord.jsonexportador;
+        }
+
+        if (savedJsonStr) {
+          const parsed = typeof savedJsonStr === 'string' ? JSON.parse(savedJsonStr) : savedJsonStr;
+          if (parsed && parsed.sections) {
+            reportSections = parsed.sections;
+            sanitizeSections(reportSections);
+            if (parsed.reportTitle) document.getElementById('pdf-title').innerText = parsed.reportTitle;
+            if (parsed.reportSubtitle) document.getElementById('pdf-subtitle').innerText = parsed.reportSubtitle;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Nenhuma configuração salva encontrada no Grist:", e);
+      }
+
+      // If no saved config found, show notice
+      document.getElementById('pdf-sections-content').innerHTML = `
+        <div style="text-align: center; color: #64748b; padding: 40px; border: 1px dashed #cbd5e1; border-radius: 8px;">
+          <h3 style="color: #1e293b; margin-bottom: 8px;">ℹ️ Nenhum Modelo de Relatório Configurado</h3>
+          <p style="font-size: 0.85rem;">Entre em contato com o Administrador para configurar e salvar a estrutura do relatório.</p>
+        </div>
+      `;
+    }
+
+    function sanitizeSections(sections, depth = 0) {
+      for (const sec of sections) {
+        if (!sec.id) sec.id = 'sec_' + Math.random().toString(36).substring(2, 9);
+        if (!sec.columns) sec.columns = [];
+        if (!sec.children) sec.children = [];
+        if (!sec.records) sec.records = [];
+        if (sec.condCol === undefined) sec.condCol = '';
+        if (!sec.condOp) sec.condOp = 'true';
+        if (sec.condVal === undefined) sec.condVal = '';
+        sec.colsLayout = 1;
+
+        if (!sec.layoutItems || sec.layoutItems.length === 0) {
+          sec.layoutItems = (sec.columns || []).map(c => ({ type: 'column', colId: c.colId }));
+        }
+
+        sanitizeSections(sec.children, depth + 1);
+      }
+    }
+
+    function updateRootRecordNavigator() {
+      const rootSec = reportSections[0];
+      const select = document.getElementById('root-record-select');
+      const counter = document.getElementById('root-record-counter');
+      if (!rootSec || !rootSec.records || rootSec.records.length === 0) {
+        select.innerHTML = '<option value="0">Nenhum registro</option>';
+        counter.innerText = '(0 de 0)';
+        return;
+      }
+
+      const total = rootSec.records.length;
+      if (activeGristRecord && activeGristRecord.id) {
+        const foundIdx = rootSec.records.findIndex(r => String(r.id) === String(activeGristRecord.id));
+        if (foundIdx !== -1) currentRootRecordIndex = foundIdx;
+      }
+
+      if (currentRootRecordIndex < 0) currentRootRecordIndex = 0;
+      if (currentRootRecordIndex >= total) currentRootRecordIndex = total - 1;
+
+      select.innerHTML = rootSec.records.map((r, idx) => {
+        const name = r.Nome_da_Empresa || r.Nome || r.Title || r.Razao_Social || `Registro #${r.id}`;
+        return `<option value="${idx}" ${idx === currentRootRecordIndex ? 'selected' : ''}>${name}</option>`;
+      }).join('');
+
+      counter.innerText = `(${currentRootRecordIndex + 1} de ${total})`;
+    }
+
+    function navigateRootRecord(direction) {
+      const rootSec = reportSections[0];
+      if (!rootSec || !rootSec.records || rootSec.records.length === 0) return;
+      currentRootRecordIndex += direction;
+      if (currentRootRecordIndex < 0) currentRootRecordIndex = rootSec.records.length - 1;
+      if (currentRootRecordIndex >= rootSec.records.length) currentRootRecordIndex = 0;
+      updateRootRecordNavigator();
+      updatePreview();
+    }
+
+    function onRootRecordSelectChange() {
+      const select = document.getElementById('root-record-select');
+      if (!select) return;
+      currentRootRecordIndex = parseInt(select.value, 10) || 0;
+      updateRootRecordNavigator();
+      updatePreview();
+    }
+
+    async function loadSectionData(sec) {
+      if (!sec.tableId) return;
+      try {
+        const data = await grist.docApi.fetchTable(sec.tableId);
+        sec.records = data.records ? data.records.map(r => r.fields || r) : (Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.warn(`Erro ao carregar dados da tabela '${sec.tableId}':`, e);
+      }
+      if (sec.children && sec.children.length > 0) {
+        for (const child of sec.children) {
+          await loadSectionData(child);
+        }
+      }
+    }
+
+    async function updatePreview() {
+      if (!reportSections || reportSections.length === 0) return;
+      
+      const rootSec = reportSections[0];
+      await loadSectionData(rootSec);
+
+      const html = renderSectionRecordsHTML(rootSec, null);
+      document.getElementById('pdf-sections-content').innerHTML = html;
+    }
+
+    function evaluateSectionCondition(sec, parentRecord) {
+      if (!sec || !sec.condCol || String(sec.condCol).trim() === '') return true;
+      const colName = String(sec.condCol).trim();
+      let val = undefined;
+      if (parentRecord && parentRecord[colName] !== undefined) val = parentRecord[colName];
+      if (val === undefined && activeGristRecord && activeGristRecord[colName] !== undefined) val = activeGristRecord[colName];
+
+      const op = sec.condOp || 'true';
+      if (op === 'true') return Boolean(val && val !== '0' && val !== 'false' && val !== 'não');
+      if (op === 'false') return !val || val === '0' || val === 'false' || val === 'não';
+      if (op === 'equals') return String(val || '').trim().toLowerCase() === String(sec.condVal || '').trim().toLowerCase();
+      if (op === 'not_equals') return String(val || '').trim().toLowerCase() !== String(sec.condVal || '').trim().toLowerCase();
+      return true;
+    }
+
+    function getFilteredChildRecords(sec, parentRecord, parentTableId) {
+      if (!sec.records || !parentRecord) return [];
+      const linkCol = sec.linkColumn || (parentTableId + 'Ref');
+      return sec.records.filter(r => String(r[linkCol]) === String(parentRecord.id) || String(r[linkCol + '_id']) === String(parentRecord.id));
+    }
+
+    function parseJsonValue(val) {
+      if (!val) return null;
+      if (typeof val === 'object') return val;
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try { return JSON.parse(trimmed); } catch (e) { return null; }
+        }
+      }
+      return null;
+    }
+
+    function formatCellValue(val, type, colMeta) {
+      if (val === null || val === undefined) return '-';
+      if (typeof val === 'boolean') return val ? 'SIM' : 'NÃO';
+      
+      const parsedJson = parseJsonValue(val);
+      if (parsedJson) {
+        if (Array.isArray(parsedJson)) {
+          return parsedJson.map(item => `• ${typeof item === 'object' ? JSON.stringify(item) : item}`).join('<br>');
+        }
+        return Object.entries(parsedJson).map(([k, v]) => `<strong>${k.replace(/_/g, ' ')}:</strong> ${v}`).join('<br>');
+      }
+      return String(val);
+    }
+
+    function renderSectionRecordsHTML(sec, parentRecord) {
+      if (!evaluateSectionCondition(sec, parentRecord)) return '';
+
+      const activeCols = (sec.columns || []).filter(c => c.enabled !== false);
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
+
+      let filteredRecords = [];
+      if (parentRecord) {
+        filteredRecords = getFilteredChildRecords(sec, parentRecord, sec.parentTableId);
+      } else if (isSingleMode) {
+        if (sec.records && sec.records.length > 0) {
+          const chosen = sec.records[currentRootRecordIndex] || sec.records[0];
+          filteredRecords = [chosen];
+        }
+      } else {
+        filteredRecords = sec.records || [];
+      }
+
+      const recordsHtml = filteredRecords.map((row, rIdx) => {
+        const childrenHtml = (sec.children || []).map(child => renderSectionRecordsHTML(child, row)).join('');
+        const innerContentBlocks = [];
+
+        (sec.layoutItems || []).forEach(item => {
+          if (item.type === 'group') {
+            const validCols = (item.cols || []).filter(slot => {
+              const colMeta = sec.columns.find(col => col.colId === slot.colId);
+              return colMeta && colMeta.enabled !== false;
+            });
+            if (validCols.length === 0) return;
+
+            const gridTemplate = validCols.map(s => (s.width || (100 / validCols.length)) + 'fr').join(' ');
+            const groupFieldsHtml = validCols.map(slot => {
+              const colMeta = sec.columns.find(col => col.colId === slot.colId);
+              const cellVal = row[colMeta.colId];
+              const val = formatCellValue(cellVal, colMeta.type, colMeta);
+              const colName = colMeta.customLabel || (colMeta.useLabel !== false ? colMeta.label : colMeta.colId);
+              const hasGroupBg = Boolean(item.bgColor && item.bgColor !== 'transparent');
+              const groupFieldCardStyle = hasGroupBg ? 'background: #ffffff !important; color: #1e293b !important; padding: 8px 10px; border-radius: 6px; border: 1px solid #cbd5e1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);' : '';
+
+              return `
+                <div class="viewer-field-box" style="${groupFieldCardStyle}">
+                  <span class="viewer-field-label">${colName}</span>
+                  <span class="viewer-field-val">${val}</span>
+                </div>
+              `;
+            }).join('');
+
+            const hasBg = Boolean(item.bgColor && item.bgColor !== 'transparent');
+            const showBanner = item.showTitle !== false && Boolean(item.title && item.title.trim() !== '');
+            const bannerBg = item.bgColor || '#1F3864';
+
+            if (showBanner || hasBg) {
+              innerContentBlocks.push(`
+                <div class="pdf-group-card" style="background: ${hasBg ? item.bgColor : 'transparent'}; border: ${hasBg ? '1px solid rgba(0,0,0,0.12)' : 'none'};">
+                  ${showBanner ? `<div class="pdf-group-banner" style="background: ${bannerBg}; color: ${item.textColor || '#ffffff'};">${item.title}</div>` : ''}
+                  <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: 8px; padding: ${hasBg ? '10px' : '0'}; align-items: stretch; width: 100%;">
+                    ${groupFieldsHtml}
+                  </div>
+                </div>
+              `);
+            } else {
+              innerContentBlocks.push(`
+                <div style="display: grid; grid-template-columns: ${gridTemplate}; gap: 6px; margin-bottom: 8px; align-items: stretch; width: 100%;">
+                  ${groupFieldsHtml}
+                </div>
+              `);
+            }
+          } else if (item.type === 'column') {
+            const c = (sec.columns || []).find(col => col.colId === item.colId);
+            if (!c || c.enabled === false) return;
+            const cellVal = row[c.colId];
+            const val = formatCellValue(cellVal, c.type, c);
+            const colName = c.customLabel || (c.useLabel !== false ? c.label : c.colId);
+
+            innerContentBlocks.push(`
+              <div class="viewer-field-box">
+                <span class="viewer-field-label">${colName}</span>
+                <span class="viewer-field-val">${val}</span>
+              </div>
+            `);
+          }
+        });
+
+        const cardHtml = `
+          <div class="pdf-record-card">
+            ${innerContentBlocks.join('')}
+          </div>
+        `;
+
+        const subChildrenBlock = childrenHtml ? `
+          <div style="grid-column: 1 / -1; width: 100%; margin-top: 8px; padding-left: 6px; border-left: 2px solid var(--pdf-theme-color, #1F3864);">
+            ${childrenHtml}
+          </div>
+        ` : '';
+
+        return cardHtml + subChildrenBlock;
+      }).join('');
+
+      return `
+        <div class="viewer-section-container">
+          <div class="viewer-section-title">${sec.title}</div>
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+            ${recordsHtml || `<div style="text-align: center; color: #94a3b8; padding: 10px; font-size: 8pt; border: 1px dashed #e2e8f0; border-radius: 6px;">Sem dados em ${sec.title}</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    async function exportPDF() {
+      const sheet = document.getElementById('pdf-preview-sheet');
+      if (!sheet) return;
+      const { jsPDF } = window.jspdf;
+
+      try {
+        const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, logging: false });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210;
+        const pageHeight = 297;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft >= 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
+        const rootSec = reportSections[0];
+        const recordName = (rootSec && rootSec.records && rootSec.records[currentRootRecordIndex])
+          ? (rootSec.records[currentRootRecordIndex].Nome_da_Empresa || `Empresa_${currentRootRecordIndex+1}`).replace(/[^a-zA-Z0-9_\-]/g, '_')
+          : 'Relatorio';
+        
+        pdf.save(`Relatorio_${recordName}.pdf`);
+      } catch (err) {
+        console.error("Erro ao gerar PDF:", err);
+        alert("Erro ao gerar PDF: " + err.message);
+      }
+    }
+
+    function exportExcel() {
+      const formatSelect = document.getElementById('excel-format-select');
+      const formatMode = formatSelect ? formatSelect.value : 'vertical';
+      if (formatMode === 'relational') {
+        exportExcelRelational();
+      } else {
+        exportExcelVertical();
+      }
+    }
+
+    function exportExcelVertical() {
+      const wb = XLSX.utils.book_new();
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
+      const rootSec = reportSections[0];
+      if (!rootSec || !rootSec.records) return;
+
+      const recordsToProcess = isSingleMode ? [rootSec.records[currentRootRecordIndex] || rootSec.records[0]] : rootSec.records;
+
+      const cleanText = (val) => {
+        if (!val) return '';
+        return String(val).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+      };
+
+      const processSectionTree = (sec, depth = 0) => {
+        const rowsAOA = [];
+        rowsAOA.push([`📊 RELATÓRIO - SEÇÃO: ${(sec.title || sec.tableId).toUpperCase()}`]);
+        rowsAOA.push([]);
+
+        recordsToProcess.forEach((rootRow, rIdx) => {
+          const companyName = rootRow.Nome_da_Empresa || rootRow.Nome || `Empresa #${rIdx + 1}`;
+          rowsAOA.push([`🏢 EMPRESA #${rIdx + 1}: ${companyName.toUpperCase()}`]);
+
+          const targetRecords = depth === 0 ? [rootRow] : getFilteredChildRecords(sec, rootRow, sec.parentTableId);
+          targetRecords.forEach(row => {
+            (sec.columns || []).filter(c => c.enabled !== false).forEach(c => {
+              const label = c.customLabel || c.label || c.colId;
+              rowsAOA.push([`   • ${label}:`, cleanText(row[c.colId])]);
+            });
+            rowsAOA.push([]);
+          });
+          rowsAOA.push([]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rowsAOA);
+        ws['!cols'] = [{ wch: 45 }, { wch: 75 }];
+        const sheetName = (sec.title || sec.tableId).replace(/[\[\]\*\?\/\\:]/g, '').substring(0, 30);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+        if (sec.children) sec.children.forEach(child => processSectionTree(child, depth + 1));
+      };
+
+      processSectionTree(rootSec, 0);
+      XLSX.writeFile(wb, 'Relatorio_Executivo.xlsx');
+    }
+
+    function exportExcelRelational() {
+      const wb = XLSX.utils.book_new();
+      const scopeSelect = document.getElementById('report-scope-select');
+      const isSingleMode = !scopeSelect || scopeSelect.value === 'selected';
+      const rootSec = reportSections[0];
+      if (!rootSec || !rootSec.records) return;
+
+      const recordsToProcess = isSingleMode ? [rootSec.records[currentRootRecordIndex] || rootSec.records[0]] : rootSec.records;
+
+      const processSectionSheet = (sec) => {
+        const rowsAOA = [];
+        const cols = (sec.columns || []).filter(c => c.enabled !== false);
+        rowsAOA.push(['Empresa (Vínculo)', ...cols.map(c => c.customLabel || c.label || c.colId)]);
+
+        recordsToProcess.forEach(rootRow => {
+          const companyName = rootRow.Nome_da_Empresa || rootRow.Nome || `Empresa #${rootRow.id}`;
+          const targetRecords = sec === rootSec ? [rootRow] : getFilteredChildRecords(sec, rootRow, sec.parentTableId);
+          targetRecords.forEach(row => {
+            const rowData = [companyName];
+            cols.forEach(c => rowData.push(row[c.colId] ?? ''));
+            rowsAOA.push(rowData);
+          });
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rowsAOA);
+        const sheetName = (sec.title || sec.tableId).substring(0, 30);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+        if (sec.children) sec.children.forEach(child => processSectionSheet(child));
+      };
+
+      processSectionSheet(rootSec);
+      XLSX.writeFile(wb, 'Relatorio_Relacional.xlsx');
+    }
+
+    // Run Viewer Initialization
+    window.addEventListener('DOMContentLoaded', initViewer);
+  </script>
+</body>
+</html>
