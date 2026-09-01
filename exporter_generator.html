@@ -1563,7 +1563,7 @@
         if (sec.maxRecords === undefined || sec.maxRecords === null) {
           sec.maxRecords = depth === 0 ? 1 : 0;
         }
-        if (!sec.colsLayout) sec.colsLayout = 1;
+        sec.colsLayout = 1;
         if (!sec.pageBreak) sec.pageBreak = 'avoid';
 
         if (sec.tableId && !gristTables.some(t => t.tableId.toLowerCase() === sec.tableId.toLowerCase())) {
@@ -2736,16 +2736,6 @@
             <select id="prop-recheader-${sec.id}" onchange="onSectionRecHeaderChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
               <option value="true" ${sec.showRecordHeader !== false ? 'selected' : ''}>Exibir ("Registro #1 — Tabela X")</option>
               <option value="false" ${sec.showRecordHeader === false ? 'selected' : ''}>Ocultar (Remover Cabeçalho dos Registros)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label style="font-weight: 700; color: #fff;">Colunas (Grid)</label>
-            <select id="prop-cols-${sec.id}" onchange="onSectionColsLayoutChange('${sec.id}')" style="width: 100%; padding: 8px; font-size: 0.85rem; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 6px;">
-              <option value="1" ${(sec.colsLayout||1)==1?'selected':''}>1 Coluna (Padrão)</option>
-              <option value="2" ${(sec.colsLayout||1)==2?'selected':''}>2 Colunas</option>
-              <option value="3" ${(sec.colsLayout||1)==3?'selected':''}>3 Colunas</option>
-              <option value="4" ${(sec.colsLayout||1)==4?'selected':''}>4 Colunas (ex: PDCA)</option>
             </select>
           </div>
 
@@ -4727,7 +4717,7 @@
               <button class="preview-btn delete" onclick="removeSection('${sec.id}')" title="Excluir Seção">✕</button>
             </div>
           </div>
-          <div class="section-cols-${sec.colsLayout || 1}">
+          <div class="section-records-container" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
             ${recordsHtml.length > 0 ? recordsHtml + cappedNotice : `<div style="text-align: center; color: #94a3b8; padding: 10px; font-size: 8pt; border: 1px dashed #e2e8f0; border-radius: 6px;">Sem dados vinculados em ${sec.title}</div>`}
           </div>
         </div>
