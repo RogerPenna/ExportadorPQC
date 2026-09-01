@@ -4720,7 +4720,7 @@
               <button class="preview-btn delete" onclick="removeSection('${sec.id}')" title="Excluir Seção">✕</button>
             </div>
           </div>
-          <div>
+          <div class="section-cols-${sec.colsLayout || 1}">
             ${recordsHtml.length > 0 ? recordsHtml + cappedNotice : `<div style="text-align: center; color: #94a3b8; padding: 10px; font-size: 8pt; border: 1px dashed #e2e8f0; border-radius: 6px;">Sem dados vinculados em ${sec.title}</div>`}
           </div>
         </div>
